@@ -306,3 +306,4 @@ class Orchestrator:
         self._auto_debug(path, data, app_type=spec.get("project_type", "auto"))
         print_run_instructions(path)
         return path
+
