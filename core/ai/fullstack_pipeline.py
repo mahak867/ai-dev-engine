@@ -215,14 +215,59 @@ def _frontend_prompt(ctx: dict) -> str:
     use_clerk  = spec.get("use_clerk", True)
 
     clerk_ui = """
-CLERK AUTH:
-- Install @clerk/clerk-react in package.json
-- main.jsx: wrap app in <ClerkProvider publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY}>
-- App.jsx routes: /sign-in -> <SignIn routing="path" path="/sign-in" />, /sign-up -> <SignUp routing="path" path="/sign-up" />
-- Protected routes: wrap in <SignedIn>...</SignedIn><SignedOut><Navigate to="/sign-in" /></SignedOut>
-- Navbar: show <UserButton afterSignOutUrl="/sign-in" /> when signed in
-- Get token: const { getToken } = useAuth(); const token = await getToken()
-- API calls: Authorization: Bearer ${token}
+CLERK AUTH (Core 3 - latest):
+PACKAGES: "@clerk/clerk-react": "^5.0.0", "@clerk/ui": "^1.0.0"
+
+main.jsx - ClerkProvider with dark theme:
+import { dark } from "@clerk/ui/themes"
+const clerkAppearance = {
+  theme: dark,
+  variables: {
+    colorPrimary: "#f0c040",
+    colorBackground: "#080808",
+    colorInputBackground: "#161616",
+    colorInputText: "#f0ede8",
+    colorText: "#f0ede8",
+    colorTextSecondary: "#909090",
+    borderRadius: "8px",
+    fontFamily: "DM Sans, sans-serif",
+    colorDanger: "#f87171",
+    colorSuccess: "#34d399",
+  },
+  elements: {
+    card: "background:#111;border:1px solid #222;box-shadow:0 16px 48px rgba(0,0,0,0.8)",
+    formButtonPrimary: "background:#f0c040;color:#080808;font-weight:600",
+    footerActionLink: "color:#f0c040",
+    identityPreviewText: "color:#f0ede8",
+    userButtonAvatarBox: "width:32px;height:32px",
+    userButtonPopoverCard: "background:#111;border:1px solid #222",
+    userButtonPopoverActionButton: "color:#f0ede8",
+  }
+}
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <ClerkProvider publishableKey={KEY} appearance={clerkAppearance}>
+    <App />
+  </ClerkProvider>
+)
+
+App.jsx routes:
+- /sign-in/* → <SignIn routing="path" path="/sign-in" afterSignInUrl="/" fallbackRedirectUrl="/" />
+- /sign-up/* → <SignUp routing="path" path="/sign-up" afterSignUpUrl="/" fallbackRedirectUrl="/" />
+- Protected: <SignedIn>{children}</SignedIn><SignedOut><RedirectToSignIn /></SignedOut>
+
+Navbar with Clerk Core 3:
+import { SignedIn, SignedOut, UserButton, SignInButton } from "@clerk/clerk-react"
+<SignedIn><UserButton appearance={{ elements: { avatarBox: "width:32px;height:32px" } }} /></SignedIn>
+<SignedOut><SignInButton mode="modal"><button className="btn btn-primary btn-sm">Sign In</button></SignInButton></SignedOut>
+
+Get token for API calls:
+const { getToken } = useAuth()
+const token = await getToken()
+headers: { Authorization: `Bearer ${token}` }
+
+Get user info:
+const { user } = useUser()
+user.firstName, user.lastName, user.emailAddresses[0].emailAddress, user.imageUrl
 """ if (needs_auth and use_clerk) else ""
 
     css = """@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@700;900&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap');
@@ -307,6 +352,39 @@ export const api = {{
 }};
 
 QUALITY: Every page needs loading state, empty state, error handling. No placeholder text. Looks like Linear.app or Vercel dashboard.
+
+UI COMPONENT PATTERNS (use these exact patterns in generated code):
+
+1. Icons — use lucide-react for all icons:
+   import {{ Plus, Trash2, Edit, Check, X, ChevronRight, Home, Settings, Bell }} from 'lucide-react'
+
+2. Conditional classes — use clsx:
+   import clsx from 'clsx'
+   className={{clsx('btn', isActive && 'btn-primary', isDisabled && 'btn-disabled')}}
+
+3. Clerk UserButton appearance — match our dark theme:
+   <UserButton appearance={{{{
+     elements: {{{{
+       avatarBox: "width:32px;height:32px",
+       userButtonPopoverCard: "background:#111;border:1px solid #222",
+     }}}}
+   }}}} afterSignOutUrl="/sign-in" />
+
+4. Loading skeleton pattern:
+   <div className="skeleton" style={{{{height:20,borderRadius:6,marginBottom:8}}}} />
+
+5. Empty state pattern:
+   <div className="empty-state">
+     <span className="empty-icon"><Icon /></span>
+     <h3>No items yet</h3>
+     <p>Create your first item to get started</p>
+     <button className="btn btn-primary">+ Add Item</button>
+   </div>
+
+6. Toast notification hook usage:
+   const {{ toast }} = useToast()
+   toast('Saved successfully', 'success')
+   toast('Something went wrong', 'error')
 
 Return ONLY raw valid JSON: {{"files":[{{"path":"frontend/index.html","content":"..."}},{{"path":"frontend/src/index.css","content":"..."}}]}}
 """

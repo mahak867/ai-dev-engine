@@ -152,6 +152,22 @@ def _fix_package_json(path: Path):
                 deps["react-router-dom"] = "^6.8.0"
                 pkg["dependencies"] = deps
                 changed = True
+            if "lucide-react" not in deps:
+                deps["lucide-react"] = "^0.400.0"
+                pkg["dependencies"] = deps
+                changed = True
+            if "clsx" not in deps:
+                deps["clsx"] = "^2.1.0"
+                pkg["dependencies"] = deps
+                changed = True
+            if "framer-motion" not in deps:
+                deps["framer-motion"] = "^11.0.0"
+                pkg["dependencies"] = deps
+                changed = True
+            if "@clerk/ui" not in deps:
+                deps["@clerk/ui"] = "^1.0.0"
+                pkg["dependencies"] = deps
+                changed = True
             if changed:
                 f.write_text(json.dumps(pkg, indent=2), encoding="utf-8")
                 print(f"  [AutoFix] Fixed package.json")
@@ -207,6 +223,27 @@ def _ensure_missing_src_files(path: Path):
     if not css.exists():
         css.write_text(_base_css(), encoding="utf-8")
         print(f"  [AutoFix] Created missing index.css")
+    
+    # Create hooks directory and useToast
+    hooks_dir = src / "hooks"
+    hooks_dir.mkdir(exist_ok=True)
+    toast_hook = hooks_dir / "useToast.js"
+    if not toast_hook.exists():
+        toast_hook.write_text("""import { useState, useCallback } from 'react'
+export function useToast() {
+  const [toasts, setToasts] = useState([])
+  const toast = useCallback((message, type = 'success') => {
+    const id = Date.now()
+    setToasts(prev => [...prev, { id, message, type }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500)
+  }, [])
+  const dismiss = useCallback((id) => {
+    setToasts(prev => prev.filter(t => t.id !== id))
+  }, [])
+  return { toasts, toast, dismiss }
+}
+""", encoding="utf-8")
+        print(f"  [AutoFix] Created hooks/useToast.js")
 
 
 def _base_css():
@@ -296,6 +333,9 @@ def _create_missing_components(path: Path):
 def _navbar_stub(name):
     return (
         'import React from "react"\n'
+        'import { Link, useNavigate, useLocation } from "react-router-dom"\n'
+        'import { Menu, X, Bell, Settings } from "lucide-react"\n'
+
         'import { Link, useNavigate } from "react-router-dom"\n'
         'export default function ' + name + '({ user, onLogout }) {\n'
         '  const nav = useNavigate()\n'
@@ -512,10 +552,42 @@ def _fix_clerk_setup(path: Path):
         text = main_jsx.read_text(encoding="utf-8", errors="ignore")
         if "ClerkProvider" not in text:
             main_jsx.write_text(
-                "import React from 'react'\nimport ReactDOM from 'react-dom/client'\nimport { ClerkProvider } from '@clerk/clerk-react'\nimport App from './App'\nimport './index.css'\nconst KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_test_placeholder'\nReactDOM.createRoot(document.getElementById('root')).render(\n  <ClerkProvider publishableKey={KEY}><App /></ClerkProvider>\n)\n",
+                """import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { ClerkProvider } from '@clerk/clerk-react'
+import App from './App'
+import './index.css'
+
+const KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_test_placeholder'
+
+const clerkAppearance = {
+  variables: {
+    colorPrimary: '#f0c040',
+    colorBackground: '#080808',
+    colorInputBackground: '#161616',
+    colorInputText: '#f0ede8',
+    colorText: '#f0ede8',
+    colorTextSecondary: '#909090',
+    borderRadius: '8px',
+    fontFamily: 'DM Sans, sans-serif',
+  },
+  elements: {
+    card: 'background:#111111;border:1px solid #222222;box-shadow:0 16px 48px rgba(0,0,0,0.8)',
+    formButtonPrimary: 'background:#f0c040;color:#080808;font-weight:600',
+    footerActionLink: 'color:#f0c040',
+    userButtonPopoverCard: 'background:#111111;border:1px solid #222222',
+  }
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <ClerkProvider publishableKey={KEY} appearance={clerkAppearance}>
+    <App />
+  </ClerkProvider>
+)
+""",
                 encoding="utf-8"
             )
-            print("  [AutoFix] Added ClerkProvider to main.jsx")
+            print("  [AutoFix] Added ClerkProvider with dark theme to main.jsx")
     pkg_json = path / "frontend" / "package.json"
     if pkg_json.exists():
         try:
