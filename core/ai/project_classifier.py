@@ -26,7 +26,7 @@ PROJECT_TYPES = {
 
 class ProjectClassifier:
     def classify(self, request: str) -> dict:
-        model = get_model("general")  # Use fast model for classification speed
+        model = get_model("general")  # Use general model for classification
         prompt = f"""Classify this project request and return a JSON spec.
 
 Valid project_type values:
@@ -43,6 +43,8 @@ Return ONLY valid JSON with this exact structure:
   "database_type": "sqlite" | "postgresql" | "none",
   "needs_auth": true | false,
   "use_clerk": true | false,
+  "needs_payments": true | false,
+  "payment_type": "one_time" | "subscription" | "marketplace" | "none",
   "tech_stack": ["list", "of", "technologies"],
   "key_features": ["feature 1", "feature 2", "feature 3"],
   "target_users": "<who uses this>",
@@ -54,6 +56,8 @@ Rules:
 - competition_ready is true for hackathon/CTF/demo projects
 - prefer react over html for frontend
 - prefer flask over fastapi unless explicitly requested
+- needs_payments is true for e-commerce, SaaS, marketplace, subscription apps
+- use_clerk should be true whenever needs_auth is true
 
 Project request: {request}
 """
@@ -69,6 +73,3 @@ Project request: {request}
             start = cleaned.find("{")
             end   = cleaned.rfind("}") + 1
             return json.loads(cleaned[start:end])
-
-
-

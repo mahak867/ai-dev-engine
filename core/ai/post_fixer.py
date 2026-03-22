@@ -168,6 +168,10 @@ def _fix_package_json(path: Path):
                 deps["@clerk/ui"] = "^1.0.0"
                 pkg["dependencies"] = deps
                 changed = True
+            if "@stripe/stripe-js" not in deps:
+                deps["@stripe/stripe-js"] = "^3.0.0"
+                pkg["dependencies"] = deps
+                changed = True
             if changed:
                 f.write_text(json.dumps(pkg, indent=2), encoding="utf-8")
                 print(f"  [AutoFix] Fixed package.json")
@@ -602,8 +606,23 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             pass
     env_file = path / "frontend" / ".env"
     if not env_file.exists():
-        env_file.write_text("VITE_CLERK_PUBLISHABLE_KEY=pk_test_your_key_here\n", encoding="utf-8")
-        print("  [AutoFix] Created frontend/.env — add your Clerk key from clerk.com")
+        env_file.write_text(
+            "VITE_CLERK_PUBLISHABLE_KEY=pk_test_your_key_here\n"
+            "VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_key_here\n",
+            encoding="utf-8"
+        )
+        print("  [AutoFix] Created frontend/.env — add Clerk + Stripe keys")
+    
+    # Create backend .env if missing
+    backend_env = path / "backend" / ".env"
+    if not backend_env.exists():
+        backend_env.write_text(
+            "STRIPE_SECRET_KEY=sk_test_your_stripe_secret_here\n"
+            "STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here\n"
+            "SECRET_KEY=change-this-in-production\n",
+            encoding="utf-8"
+        )
+        print("  [AutoFix] Created backend/.env — add Stripe secret keys")
 
 
 # ── Requirements ──────────────────────────────────────────────────
@@ -623,6 +642,7 @@ def _fix_requirements(path: Path):
             ("flask_cors", "flask-cors"),
             ("flask_sqlalchemy", "flask-sqlalchemy"),
             ("dotenv", "python-dotenv"),
+            ("stripe", "stripe"),
         ]
         for keyword, package in checks:
             if uses(keyword) and package not in text.lower():
