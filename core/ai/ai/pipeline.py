@@ -121,9 +121,10 @@ def build_debug_pipeline() -> Pipeline:
             name="Error Analysis",
             task_type="reasoner",
             prompt_fn=lambda ctx: (
-                "You are a debugging expert. Analyse this error and describe what needs to be fixed.\n\n"
-                f"Error:\n{ctx['error'][:500]}\n\n"
-                f"Code (truncated):\n{ctx['code'][:2000]}"
+                "You are a debugging expert.\n\n"
+                "Analyse this runtime error and describe exactly what needs to be fixed.\n\n"
+                f"Error:\n{ctx['error']}\n\n"
+                f"Project code:\n{ctx['code']}"
             ),
             output_key="analysis",
         ),
@@ -131,9 +132,11 @@ def build_debug_pipeline() -> Pipeline:
             name="Apply Fix",
             task_type="coder",
             prompt_fn=lambda ctx: (
-                "Fix this error. Return ONLY valid JSON: {\"files\":[{\"path\":\"file.py\",\"content\":\"fixed code\"}]}\n\n"
-                f"Analysis:\n{ctx['analysis'][:500]}\n\n"
-                f"Code:\n{ctx['code'][:2000]}"
+                "You are an expert Python engineer.\n\n"
+                "Apply the fix to the project code.\n\n"
+                'Return ONLY valid JSON: {"files":[{"path":"file.py","content":"fixed code"}]}\n\n'
+                f"Fix analysis:\n{ctx['analysis']}\n\n"
+                f"Original code:\n{ctx['code']}"
             ),
             output_key="fixed_code",
         ),

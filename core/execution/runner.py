@@ -150,7 +150,8 @@ class CodeRunner:
             return {"success": True, "output": "Frontend dev server started.", "type": "node"}
         except FileNotFoundError:
             return {
-                "success": True, "output": "npm not found - install Node.js. Frontend files are ready.",
+                "success": True,
+                "output": "npm not found — install Node.js from https://nodejs.org. Frontend files generated and ready.",
                 "type": "node",
             }
         except Exception as e:
@@ -189,7 +190,7 @@ class CodeRunner:
         if app_type == "static":
             return self._run_static()
 
-        if app_type in ("fullstack_node", "fullstack_react"):
+        if app_type in ("fullstack_node", "fullstack_react", "saas_platform", "ecommerce", "marketplace", "dashboard", "social_app"):
             print("  🔗 Running backend + frontend...")
             entry   = self._find_python_entry()
             py_res  = self._run_python(entry) if entry else {"success": True, "output": "no backend entry"}
@@ -214,4 +215,3 @@ class CodeRunner:
             }
 
         return {"success": False, "error": f"Unknown app type: {app_type}", "type": "unknown"}
-
