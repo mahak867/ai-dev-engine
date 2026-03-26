@@ -13,6 +13,34 @@ from core.tools.dependency_installer import DependencyInstaller
 MAX_DEBUG_ATTEMPTS = 3
 
 
+def _print_run_instructions(path):
+    from pathlib import Path
+    p = Path(path)
+    name = p.name
+    has_backend = (p / "backend" / "app.py").exists()
+    has_frontend = (p / "frontend" / "package.json").exists()
+    has_env = (p / "frontend" / ".env").exists()
+    print("\n" + "="*50)
+    print("  HOW TO RUN YOUR APP")
+    print("="*50)
+    if has_backend:
+        print(f"\n  BACKEND (Terminal 1):")
+        print(f"    cd {name}\\backend")
+        print(f"    py app.py")
+        print(f"    -> http://127.0.0.1:5000")
+    if has_frontend:
+        print(f"\n  FRONTEND (Terminal 2):")
+        print(f"    cd {name}\\frontend")
+        print(f"    npm install")
+        print(f"    npm run dev")
+        print(f"    -> http://localhost:5173")
+    if has_env:
+        print(f"\n  CLERK AUTH:")
+        print(f"    Edit {name}\\frontend\\.env")
+        print(f"    VITE_CLERK_PUBLISHABLE_KEY=pk_test_...")
+    print("\n" + "="*50 + "\n")
+
+
 class Orchestrator:
 
     def __init__(self, llm: LLMClient = None, dry_run: bool = False):
@@ -252,7 +280,8 @@ class Orchestrator:
     # ── PUBLIC: full-stack ────────────────────────────────────────
     def generate_fullstack(self, name: str, request: str) -> str:
         from core.ai.fullstack_pipeline import run_fullstack_generation
-
+        from core.ai.fullstack_pipeline import run_fullstack_generation
+        from core.ai.senior_team import tech_lead_review, backend_review, frontend_review, final_review, apply_corrections
         if self.dry_run:
             print("\n[dry-run] Would run: 8-step full-stack pipeline")
             steps = [
@@ -288,14 +317,55 @@ class Orchestrator:
         if not data.get("files"):
             raise Exception("No files were generated — all pipeline steps may have failed.")
 
+        # ── SENIOR TEAM REVIEW ────────────────────────────────────
+        complexity = spec.get("complexity", "moderate")
+        run_reviews = complexity in ("complex", "advanced")
+
+        if run_reviews and data.get("files"):
+            print(f"\n  👥  Senior Team Review ({complexity} project)...")
+            import json as _json
+
+            # Backend lead reviews backend files
+            backend_files = [f for f in data["files"] if str(f.get("path","")).startswith("backend/")]
+            if backend_files:
+                print("     Backend Lead reviewing...")
+                try:
+                    backend_fixes = backend_review(_json.dumps({"files": backend_files[:5]}), spec)
+                    if backend_fixes:
+                        data["files"] = apply_corrections(data["files"], backend_fixes)
+                except Exception as e:
+                    print(f"     ⚠️  Backend review error: {e}")
+
+            # Frontend lead reviews frontend files
+            frontend_files = [f for f in data["files"] if str(f.get("path","")).startswith("frontend/")]
+            if frontend_files:
+                print("     Frontend Lead reviewing...")
+                try:
+                    frontend_fixes = frontend_review(_json.dumps({"files": frontend_files[:5]}), spec)
+                    if frontend_fixes:
+                        data["files"] = apply_corrections(data["files"], frontend_fixes)
+                except Exception as e:
+                    print(f"     ⚠️  Frontend review error: {e}")
+
+            # Final security + quality check
+            print("     Final security review...")
+            try:
+                final_result = final_review(data["files"], spec)
+                score = final_result.get("confidence_score", 75)
+                print(f"\n  📊 Quality Score: {score}/100")
+            except Exception as e:
+                print(f"     ⚠️  Final review error: {e}")
+        else:
+            print(f"\n  ⚡ Fast mode ({complexity}) — skipping peer review")
+
         if not data.get("files"):
             raise Exception("No files were generated.")
 
         print(f"\n📂 Writing {len(data['files'])} files...")
         path = self._write_files(name, data["files"])
         # Auto-fix common generation errors
-        from core.ai.post_fixer import fix_project
-        fix_project(path)
+        from core.ai.post_fixer import fix_project, print_run_instructions
+        fix_project(path, request=request, spec=spec)
         self._ensure_entry_point(path, spec.get("project_type", "unknown"))
         self._install_deps(path)
 
@@ -306,4 +376,3 @@ class Orchestrator:
         self._auto_debug(path, data, app_type=spec.get("project_type", "auto"))
         print_run_instructions(path)
         return path
-
