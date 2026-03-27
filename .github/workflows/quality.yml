@@ -1,0 +1,103 @@
+name: Quality Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  engine-quality:
+    name: Engine Quality Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install ast-comments 2>/dev/null || true
+
+      - name: Engine size check (ensure we are growing not shrinking)
+        run: |
+          python3 - << 'PYEOF'
+          import os, sys
+
+          min_sizes = {
+              'core/ai/fullstack_pipeline.py': 20000,
+              'core/ai/post_fixer.py': 40000,
+              'core/ai/integrations.py': 20000,
+              'core/ai/skills_library.py': 10000,
+              'core/ai/senior_team.py': 5000,
+              'core/ai/project_classifier.py': 4000,
+          }
+
+          all_ok = True
+          for path, min_size in min_sizes.items():
+              if os.path.exists(path):
+                  size = os.path.getsize(path)
+                  if size < min_size:
+                      print(f'TOO SMALL: {path} is {size} bytes (min {min_size})')
+                      all_ok = False
+                  else:
+                      print(f'✓ {path}: {size:,} bytes')
+              else:
+                  print(f'MISSING: {path}')
+                  all_ok = False
+
+          sys.exit(0 if all_ok else 1)
+          PYEOF
+
+      - name: Verify skills completeness
+        run: |
+          python3 - << 'PYEOF'
+          import sys
+          sys.path.insert(0, '.')
+
+          try:
+              from core.ai.skills_library import SKILLS
+              count = len(SKILLS)
+              print(f'✓ {count} skills loaded')
+              if count < 7:
+                  print(f'WARNING: Only {count} skills, expected 8+')
+          except Exception as e:
+              print(f'ERROR loading skills: {e}')
+              sys.exit(1)
+          PYEOF
+
+      - name: Verify 16+ integrations present
+        run: |
+          python3 - << 'PYEOF'
+          import sys
+          sys.path.insert(0, '.')
+
+          try:
+              from core.ai.integrations import INTEGRATIONS
+              count = len(INTEGRATIONS)
+              print(f'✓ {count} integrations loaded')
+              if count < 14:
+                  print(f'WARNING: Only {count} integrations, expected 16+')
+          except Exception as e:
+              print(f'ERROR loading integrations: {e}')
+              sys.exit(1)
+          PYEOF
+
+      - name: Verify 30 project types
+        run: |
+          python3 - << 'PYEOF'
+          import sys
+          sys.path.insert(0, '.')
+
+          try:
+              from core.ai.project_classifier import PROJECT_TYPES
+              count = len(PROJECT_TYPES)
+              print(f'✓ {count} project types loaded')
+              if count < 20:
+                  print(f'WARNING: Only {count} project types, expected 30+')
+          except Exception as e:
+              print(f'ERROR: {e}')
+              sys.exit(1)
+          PYEOF

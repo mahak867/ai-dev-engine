@@ -1,0 +1,84 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 0 * * 1'  # Every Monday
+
+jobs:
+  secret-scan:
+    name: Secret Scanner
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for git log scan
+
+      - name: Scan for hardcoded secrets
+        run: |
+          python3 - << 'PYEOF'
+          import re, os, sys
+
+          PATTERNS = [
+              (r'gsk_[a-zA-Z0-9]{20,}', 'Groq API key'),
+              (r'sk-[a-zA-Z0-9]{20,}', 'OpenAI API key'),
+              (r'sk_live_[a-zA-Z0-9]{20,}', 'Stripe live secret'),
+              (r'pk_live_[a-zA-Z0-9]{20,}', 'Stripe live publishable'),
+              (r're_[a-zA-Z0-9]{35,}', 'Resend API key'),
+              (r'ghp_[a-zA-Z0-9]{30,}', 'GitHub token'),
+              (r'\b\d{9,10}:[A-Za-z0-9_-]{35,}\b', 'Telegram token'),
+              (r'AIza[0-9A-Za-z_-]{35}', 'Google API key'),
+              (r'AKIA[0-9A-Z]{16}', 'AWS access key'),
+          ]
+
+          SAFE_PATTERNS = ['your_', 'example', 'placeholder', 'test_your',
+                           'sk_test_your', 'pk_test_your', 'fake', 'dummy',
+                           'your-key', 'your-secret']
+
+          issues = []
+          for root, dirs, files in os.walk('.'):
+              dirs[:] = [d for d in dirs if d not in
+                         ['__pycache__', '.git', 'node_modules', 'projects', 'dist']]
+              for fname in files:
+                  ext = os.path.splitext(fname)[1]
+                  if ext not in ['.py', '.js', '.jsx', '.ts', '.tsx',
+                                 '.json', '.yml', '.yaml', '.env', '.cfg', '.ini']:
+                      continue
+                  path = os.path.join(root, fname)
+                  try:
+                      content = open(path, encoding='utf-8', errors='ignore').read()
+                      for pattern, label in PATTERNS:
+                          for match in re.findall(pattern, content):
+                              if any(s in match.lower() for s in SAFE_PATTERNS):
+                                  continue
+                              issues.append(f'::error file={path}::{label} found: {match[:20]}...')
+                  except:
+                      pass
+
+          if issues:
+              for issue in issues:
+                  print(issue)
+              sys.exit(1)
+          print('✓ No secrets found in codebase')
+          PYEOF
+
+      - name: Check .gitignore protects sensitive files
+        run: |
+          python3 - << 'PYEOF'
+          import sys
+
+          required_in_gitignore = ['.env', '.env.*', '*.key', '*.pem', '__pycache__', 'node_modules']
+          content = open('.gitignore', encoding='utf-8').read() if os.path.exists('.gitignore') else ''
+          import os
+
+          missing = []
+          for pattern in required_in_gitignore:
+              if pattern not in content:
+                  missing.append(pattern)
+
+          if missing:
+              print(f'WARNING: .gitignore missing: {missing}')
+          else:
+              print('✓ .gitignore properly configured')
+          PYEOF
