@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Count engine stats
+        id: stats
+        run: |
+          python3 - << 'PYEOF'
+          import os, sys
+          sys.path.insert(0, '.')
+
+          total_chars = 0
+          file_count = 0
+          for root, dirs, files in os.walk('core'):
+              dirs[:] = [d for d in dirs if d != '__pycache__']
+              for f in files:
+                  if f.endswith('.py'):
+                      path = os.path.join(root, f)
+                      total_chars += os.path.getsize(path)
+                      file_count += 1
+
+          try:
+              from core.ai.integrations import INTEGRATIONS
+              from core.ai.project_classifier import PROJECT_TYPES
+              from core.ai.skills_library import SKILLS
+              print(f'integrations={len(INTEGRATIONS)}')
+              print(f'project_types={len(PROJECT_TYPES)}')
+              print(f'skills={len(SKILLS)}')
+          except:
+              pass
+          print(f'engine_files={file_count}')
+          print(f'engine_size={total_chars}')
+          PYEOF
+
+      - name: Create Release Notes
+        run: |
+          cat > RELEASE_NOTES.md << 'NOTES'
+          ## APEX AI Dev Engine ${{ steps.version.outputs.VERSION }}
+
+          ### What's included
+          - Multi-agent Senior Team review system (Tech Lead, Backend Lead, Frontend Lead, Code Reviewer)
+          - 8 battle-tested skill playbooks (Security, API Design, Performance, Frontend Design, etc.)
+          - 16+ auto-detected integrations (Clerk, Stripe, Resend, Socket.IO, S3, PostHog, OpenAI...)
+          - 30 project types with complexity scoring
+          - Liquid glass 2026 design system
+          - Self-healing runtime error fixer
+          - Project structure validator
+          - Desktop launcher UI
+          - Telegram bot remote control
+
+          ### How to use
+          1. Extract this zip
+          2. `pip install -r requirements.txt`
+          3. `setx GROQ_API_KEY your_key`
+          4. `py launcher.py`
+
+          Get your free Groq key at: https://console.groq.com
+          NOTES
+
+      - name: Package engine
+        run: |
+          zip -r apex-engine-${{ steps.version.outputs.VERSION }}.zip . \
+            -x "*.pyc" -x "*/__pycache__/*" -x "*.git*" \
+            -x "*/node_modules/*" -x "*/.env" -x "*/projects/*"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apex-engine-${{ steps.version.outputs.VERSION }}.zip
+          body_path: RELEASE_NOTES.md
+          name: APEX Engine ${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: false
