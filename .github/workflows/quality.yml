@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   engine-quality:
     name: Engine Quality Check
@@ -13,25 +16,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Check core files exist and have content
+      - name: Check core files exist
         run: |
-          python3 -c "
+          python3 << 'PYEOF'
           import os, sys
-          required = [
-              'core/ai/fullstack_pipeline.py',
-              'core/ai/post_fixer.py',
-              'core/ai/groq_provider.py',
-              'core/ai/project_classifier.py',
-              'core/orchestrator.py',
-              'cli.py',
-              'launcher.py',
-          ]
+          required = {
+              'core/ai/fullstack_pipeline.py': 15000,
+              'core/ai/post_fixer.py': 30000,
+              'core/ai/groq_provider.py': 3000,
+              'core/ai/project_classifier.py': 3000,
+              'core/orchestrator.py': 5000,
+              'cli.py': 3000,
+              'launcher.py': 5000,
+          }
           ok = True
-          for f in required:
-              if os.path.exists(f) and os.path.getsize(f) > 1000:
-                  print(f'OK: {f} ({os.path.getsize(f):,} bytes)')
+          for path, minsize in required.items():
+              if os.path.exists(path) and os.path.getsize(path) >= minsize:
+                  print(f'OK: {path} ({os.path.getsize(path):,} bytes)')
               else:
-                  print(f'MISSING or EMPTY: {f}')
+                  size = os.path.getsize(path) if os.path.exists(path) else 0
+                  print(f'FAIL: {path} ({size} bytes, need {minsize})')
                   ok = False
           sys.exit(0 if ok else 1)
-          "
+          PYEOF
