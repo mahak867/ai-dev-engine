@@ -1,0 +1,48 @@
+{
+  "generated_at": "2026-04-13T10:09:40",
+  "project": "elite_demo_output",
+  "mode": "Elite Agent Run",
+  "prompt": "Build a world-class personal AI dev workspace with autonomous plan build review ship and full quality gates.",
+  "cloud": {
+    "provider_preference": "Auto",
+    "profile": "quality_max",
+    "plan_provider": "",
+    "plan_model": "",
+    "review_provider": "",
+    "review_model": "",
+    "release_provider": "",
+    "release_model": ""
+  },
+  "integrations": {
+    "detected": [
+      "stripe",
+      "ai"
+    ],
+    "packages": {
+      "frontend": [
+        "@stripe/stripe-js",
+        "@stripe/react-stripe-js"
+      ],
+      "backend": [
+        "stripe==8.0.0",
+        "openai==1.30.0"
+      ],
+      "env_frontend": {
+        "VITE_STRIPE_PUBLISHABLE_KEY": "pk_test_your_key_here"
+      },
+      "env_backend": {
+        "STRIPE_SECRET_KEY": "sk_test_your_secret_here",
+        "STRIPE_WEBHOOK_SECRET": "whsec_your_webhook_secret",
+        "OPENAI_API_KEY": "sk-your_key_here"
+      },
+      "detected": [
+        "stripe",
+        "ai"
+      ]
+    }
+  },
+  "skills_summary": {
+    "total_available": 49,
+    "hinted_bundle_characters": 7527
+  }
+}

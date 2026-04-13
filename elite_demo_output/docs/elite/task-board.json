@@ -1,0 +1,14 @@
+{
+  "generated_at": "2026-04-13T10:09:40",
+  "prompt": "Build a world-class personal AI dev workspace with autonomous plan build review ship and full quality gates.",
+  "lanes": {
+    "todo": [
+      "Define architecture boundaries",
+      "Implement core command loop",
+      "Add integration scaffolding",
+      "Add quality checks"
+    ],
+    "doing": [],
+    "done": []
+  }
+}

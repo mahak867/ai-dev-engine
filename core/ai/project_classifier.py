@@ -46,6 +46,40 @@ COMPLEXITY_LEVELS = {
 }
 
 
+
+def _detect_design(request: str) -> dict:
+    """Detect accent color and design style from request. (from apex-pro design_engine)"""
+    p = request.lower()
+    # Accent color detection
+    if any(w in p for w in ["bold", "vibrant", "energetic", "pink", "red"]):
+        accent = "#ec4899"
+    elif any(w in p for w in ["minimal", "clean", "simple", "white"]):
+        accent = "#18181b"
+    elif any(w in p for w in ["blue", "professional", "corporate", "saas"]):
+        accent = "#3b82f6"
+    elif any(w in p for w in ["green", "health", "finance", "money"]):
+        accent = "#10b981"
+    elif any(w in p for w in ["purple", "creative", "ai", "tech"]):
+        accent = "#8b5cf6"
+    else:
+        accent = "#f0c040"  # APEX gold default
+
+    # Hero style
+    if any(w in p for w in ["landing", "marketing", "saas", "startup"]):
+        hero = "animated-gradient"
+    elif any(w in p for w in ["dashboard", "admin", "analytics"]):
+        hero = "stats-hero"
+    else:
+        hero = "glass-card"
+
+    return {
+        "accent_color": accent,
+        "hero_style": hero,
+        "dark_mode": True,
+        "glassmorphism": True,
+    }
+
+
 class ProjectClassifier:
     def classify(self, request: str) -> dict:
         model = get_model("general")
@@ -129,4 +163,5 @@ Project request: {request}"""
             result.setdefault('complexity', 'moderate')
             result.setdefault('needs_rbac', False)
             result.setdefault('core_models', [])
+            result.update(_detect_design(request))
             return result

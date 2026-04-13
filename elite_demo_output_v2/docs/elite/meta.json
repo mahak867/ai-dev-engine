@@ -1,0 +1,56 @@
+{
+  "generated_at": "2026-04-13T16:10:21",
+  "project": "elite_demo_output_v2",
+  "mode": "Elite Agent Run",
+  "prompt": "Build the strongest local AI dev workspace with autonomous plan build review ship loops, quality gates, and file workbench operations.",
+  "cloud": {
+    "provider_preference": "Auto",
+    "profile": "quality_max",
+    "plan_provider": "",
+    "plan_model": "",
+    "review_provider": "",
+    "review_model": "",
+    "release_provider": "",
+    "release_model": ""
+  },
+  "integrations": {
+    "detected": [
+      "stripe",
+      "storage",
+      "ai"
+    ],
+    "packages": {
+      "frontend": [
+        "@stripe/react-stripe-js",
+        "@stripe/stripe-js"
+      ],
+      "backend": [
+        "python-multipart==0.0.7",
+        "stripe==8.0.0",
+        "openai==1.30.0",
+        "boto3==1.34.0"
+      ],
+      "env_frontend": {
+        "VITE_STRIPE_PUBLISHABLE_KEY": "pk_test_your_key_here"
+      },
+      "env_backend": {
+        "STRIPE_SECRET_KEY": "sk_test_your_secret_here",
+        "STRIPE_WEBHOOK_SECRET": "whsec_your_webhook_secret",
+        "AWS_ACCESS_KEY_ID": "your_key",
+        "AWS_SECRET_ACCESS_KEY": "your_secret",
+        "AWS_BUCKET_NAME": "your_bucket",
+        "AWS_REGION": "us-east-1",
+        "OPENAI_API_KEY": "sk-your_key_here"
+      },
+      "detected": [
+        "stripe",
+        "storage",
+        "ai"
+      ]
+    }
+  },
+  "skills_summary": {
+    "total_available": 49,
+    "hinted_bundle_characters": 7527
+  }
+}

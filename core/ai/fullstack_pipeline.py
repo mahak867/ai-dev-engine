@@ -8,6 +8,7 @@ from core.ai.pipeline import Pipeline, PipelineStep
 from core.ai.project_classifier import ProjectClassifier
 from core.ai.public_apis import get_api_hint
 from core.ai.integrations import get_integration_prompt, get_extra_packages
+from core.ai.skills_library import get_category_prompt
 
 
 # ─────────────────────────────────────────────────────────────────
