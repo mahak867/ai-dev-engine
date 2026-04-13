@@ -1,0 +1,93 @@
+{
+  "generated_at": "2026-04-13T16:10:21",
+  "summary": {
+    "project": "elite_demo_output_v2",
+    "readme_exists": true,
+    "elite_docs_exists": true,
+    "python_files": 1,
+    "web_files": 1
+  },
+  "plan": {
+    "actions": [
+      "Run doctor and capture score",
+      "Ensure elite docs exist",
+      "Run syntax checks",
+      "Prepare release notes"
+    ],
+    "priority": "high"
+  },
+  "validation": {
+    "doctor": {
+      "generated_at": "2026-04-13T16:10:21",
+      "platform": "Windows 11",
+      "project_path": "C:\\Users\\Mahak\\Downloads\\ai-dev-engine\\elite_demo_output_v2",
+      "checks": [
+        {
+          "name": "python",
+          "ok": "yes",
+          "detail": "3.14.3"
+        },
+        {
+          "name": "git",
+          "ok": "yes",
+          "detail": "available"
+        },
+        {
+          "name": "workspace_write",
+          "ok": "yes",
+          "detail": "yes"
+        },
+        {
+          "name": "openrouter_key",
+          "ok": "no",
+          "detail": "missing"
+        },
+        {
+          "name": "groq_key",
+          "ok": "no",
+          "detail": "missing"
+        },
+        {
+          "name": "py_command",
+          "ok": "yes",
+          "detail": "Python 3.14.3"
+        },
+        {
+          "name": "git_repo",
+          "ok": "yes",
+          "detail": "true"
+        },
+        {
+          "name": "syntax_compile",
+          "ok": "yes",
+          "detail": "py_compile ok"
+        }
+      ],
+      "score": 75.0
+    },
+    "syntax_ok": true,
+    "syntax_message": "syntax ok"
+  },
+  "events": [
+    {
+      "time": "2026-04-13T16:10:21",
+      "stage": "inspect",
+      "detail": "Scanning key files and docs."
+    },
+    {
+      "time": "2026-04-13T16:10:21",
+      "stage": "plan",
+      "detail": "Creating execution agenda from current project shape."
+    },
+    {
+      "time": "2026-04-13T16:10:21",
+      "stage": "validate",
+      "detail": "Running doctor checks and syntax validation."
+    },
+    {
+      "time": "2026-04-13T16:10:21",
+      "stage": "finalize",
+      "detail": "Writing runtime report."
+    }
+  ]
+}

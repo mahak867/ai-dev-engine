@@ -1,0 +1,21 @@
+{
+  "commands": [
+    {
+      "name": "/plan",
+      "action": "open docs/elite/plan.md"
+    },
+    {
+      "name": "/review",
+      "action": "open docs/elite/review.md"
+    },
+    {
+      "name": "/doctor",
+      "action": "open docs/elite/doctor.md"
+    },
+    {
+      "name": "/ship",
+      "action": "open docs/elite/release-checklist.md"
+    }
+  ],
+  "generated_at": "2026-04-13T10:09:40"
+}

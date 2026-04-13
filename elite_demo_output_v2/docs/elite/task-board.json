@@ -1,0 +1,14 @@
+{
+  "generated_at": "2026-04-13T16:10:21",
+  "prompt": "Build the strongest local AI dev workspace with autonomous plan build review ship loops, quality gates, and file workbench operations.",
+  "lanes": {
+    "todo": [
+      "Define architecture boundaries",
+      "Implement core command loop",
+      "Add integration scaffolding",
+      "Add quality checks"
+    ],
+    "doing": [],
+    "done": []
+  }
+}

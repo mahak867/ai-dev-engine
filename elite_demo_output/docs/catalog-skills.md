@@ -1,0 +1,53 @@
+# Full Skills Catalog
+
+Total skills available: 49
+
+- `accessibility`: ACCESSIBILITY SKILL (WCAG 2.1 AA):
+- `ai-integration`: AI INTEGRATION SKILL (OpenAI/Groq compatible):
+- `animation-patterns`: ANIMATION PATTERNS SKILL:
+- `api-design`: API DESIGN SKILL:
+- `architecture-planning`: ARCHITECTURE PLANNING SKILL:
+- `authentication`: AUTHENTICATION SKILL (Clerk):
+- `brainstorming`: BRAINSTORMING SKILL:
+- `caching-strategy`: CACHING STRATEGY SKILL:
+- `ci-cd`: CI/CD SKILL:
+- `clerk-integration`: CLERK AUTH INTEGRATION SKILL:
+- `code-refactor`: CODE REFACTOR SKILL:
+- `code-review`: CODE REVIEW SKILL:
+- `component-library`: COMPONENT LIBRARY SKILL:
+- `cors-configuration`: CORS CONFIGURATION SKILL:
+- `create-pr`: CREATE PR SKILL:
+- `database-patterns`: DATABASE PATTERNS SKILL:
+- `debugging-strategies`: DEBUGGING STRATEGIES SKILL:
+- `deployment-skill`: DEPLOYMENT SKILL:
+- `docker-best-practices`: DOCKER BEST PRACTICES:
+- `documentation`: DOCUMENTATION SKILL:
+- `email-integration`: EMAIL INTEGRATION SKILL (Resend):
+- `environment-config`: ENVIRONMENT CONFIG SKILL:
+- `error-handling`: ERROR HANDLING SKILL:
+- `flask-patterns`: FLASK PATTERNS SKILL:
+- `form-patterns`: FORM PATTERNS SKILL:
+- `frontend-design`: FRONTEND DESIGN SKILL:
+- `git-workflow`: GIT WORKFLOW SKILL:
+- `input-validation`: INPUT VALIDATION SKILL:
+- `lint-and-validate`: LINT AND VALIDATE SKILL:
+- `llm-error-handling`: LLM ERROR HANDLING SKILL:
+- `monitoring-setup`: MONITORING SETUP SKILL:
+- `mvp-design`: MVP DESIGN SKILL:
+- `performance-audit`: PERFORMANCE AUDIT SKILL:
+- `performance-frontend`: FRONTEND PERFORMANCE SKILL:
+- `prompt-engineering`: PROMPT ENGINEERING SKILL:
+- `query-optimization`: QUERY OPTIMIZATION SKILL:
+- `railway-deploy`: RAILWAY DEPLOYMENT SKILL:
+- `rate-limiting`: RATE LIMITING SKILL:
+- `react-best-practices`: REACT BEST PRACTICES:
+- `responsive-design`: RESPONSIVE DESIGN SKILL:
+- `security-auditor`: SECURITY AUDIT CHECKLIST:
+- `senior-engineer`: SENIOR ENGINEER MINDSET:
+- `socketio-realtime`: SOCKET.IO REALTIME SKILL:
+- `state-management`: STATE MANAGEMENT SKILL:
+- `stripe-integration`: STRIPE INTEGRATION SKILL:
+- `system-design`: SYSTEM DESIGN SKILL:
+- `systematic-debugging`: SYSTEMATIC DEBUGGING SKILL:
+- `test-driven-development`: TDD SKILL:
+- `ui-polish`: UI POLISH SKILL:
