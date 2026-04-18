@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "path": "backend/app.py",
+      "content": "from flask import Flask\napp = Flask(__name__)\n\n@app.route('/')\ndef index():\n    return 'Hello from backend'\n\nif __name__ == '__main__':\n    app.run()\n"
+    },
+    {
+      "path": "frontend/package.json",
+      "content": "{\"name\": \"frontend\", \"version\": \"1.0.0\", \"scripts\": {\"dev\": \"vite\"}}\n"
+    },
+    {
+      "path": "README.md",
+      "content": "# test_app\n\nA test full-stack application.\n"
+    }
+  ]
+}
