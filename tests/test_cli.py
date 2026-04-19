@@ -98,9 +98,6 @@ class TestMainRouting:
         assert args.func is _cmd_generate
         assert args.name == "blog"
         assert args.dry_run is True
-        assert args.func is _cmd_generate
-        assert args.name == "blog"
-        assert args.dry_run is True
 
     def test_edit_routes_correctly(self):
         from cli import _cmd_edit
