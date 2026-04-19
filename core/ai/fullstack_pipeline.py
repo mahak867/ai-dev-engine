@@ -680,6 +680,7 @@ Return ONLY raw valid JSON: {{"files":[{{"path":"frontend/index.html","content":
 def _config_prompt(ctx: dict) -> str:
     spec = ctx.get("spec", {})
     needs_auth = spec.get("needs_auth", False)
+    jwt_dep = "\nflask-jwt-extended==4.6.0" if needs_auth else ""
     return f"""
 You are a senior DevOps engineer. Generate production-ready deployment files.
 
@@ -687,7 +688,7 @@ Spec: {json.dumps(spec, indent=2)}
 
 Generate:
 1. .env.example — all env vars with descriptions
-2. requirements.txt — flask==3.0.0, flask-cors==4.0.0, flask-sqlalchemy==3.1.1, flask-bcrypt==1.0.1, python-dotenv==1.0.0, gunicorn==21.2.0{"\\nflask-jwt-extended==4.6.0" if needs_auth else ""}
+2. requirements.txt — flask==3.0.0, flask-cors==4.0.0, flask-sqlalchemy==3.1.1, flask-bcrypt==1.0.1, python-dotenv==1.0.0, gunicorn==21.2.0{jwt_dep}
 3. Dockerfile — python:3.11-slim, non-root user, gunicorn
 4. docker-compose.yml — backend service
 5. .gitignore — python + node + env files
