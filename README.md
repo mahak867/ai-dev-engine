@@ -100,7 +100,7 @@ After `apex generate` completes, follow the printed instructions:
 ```
   BACKEND (Terminal 1):
     cd taskmaster/backend
-    py app.py
+    python app.py
     -> http://127.0.0.1:5000
 
   FRONTEND (Terminal 2):

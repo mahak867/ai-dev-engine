@@ -5,13 +5,12 @@ real network requests are made.  The LLMClient is replaced with a
 lightweight stub that returns pre-canned JSON payloads from the
 ``tests/fixtures/`` directory.
 """
-import importlib
 import json
 import os
 import sys
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
-from unittest.mock import MagicMock, patch
+from types import ModuleType
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -19,50 +18,72 @@ import pytest
 REPO_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-# ── Mock missing transitive dependencies before any core import ───────────────
-# core.orchestrator depends on several modules that require live API keys or
-# optional third-party packages at import time.  We stub them all out so the
-# test suite can run in an offline / dependency-free environment.
-
-def _stub_module(name: str, **attrs) -> ModuleType:
-    """Create and register a stub module in sys.modules."""
-    mod = ModuleType(name)
-    for k, v in attrs.items():
-        setattr(mod, k, v)
-    sys.modules[name] = mod
-    return mod
-
-
-# core.llm  (used by orchestrator at import time)
-_LLMClientStub = MagicMock(name="LLMClient")
-_stub_module("core.llm", LLMClient=_LLMClientStub)
-
-# core.ai.response_cleaner
-def _clean(text):
-    return text
-
-def _clean_and_parse(text):
-    import json as _json
-    text = text.strip()
-    start = text.find("{")
-    end = text.rfind("}") + 1
-    if start == -1 or end == 0:
-        raise ValueError("No JSON object found")
-    return _json.loads(text[start:end])
-
-_stub_module("core.ai.response_cleaner", clean=_clean, clean_and_parse=_clean_and_parse)
-
-# core.execution.runner / debugger
-_stub_module("core.execution", runner=None, debugger=None)
-_stub_module("core.execution.runner", CodeRunner=MagicMock())
-_stub_module("core.execution.debugger", Debugger=MagicMock())
-
-# core.tools.dependency_installer
-_stub_module("core.tools", dependency_installer=None)
-_stub_module("core.tools.dependency_installer", DependencyInstaller=MagicMock())
-
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
+# ── Module stubs ──────────────────────────────────────────────────────────────
+# core.orchestrator depends on several modules that require live API keys or
+# optional third-party packages at import time.  We register lightweight stubs
+# once via a session-scoped autouse fixture so pytest controls the lifetime and
+# each entry in sys.modules is cleaned up after the session.
+
+_STUB_NAMES = [
+    "core.llm",
+    "core.ai.response_cleaner",
+    "core.execution",
+    "core.execution.runner",
+    "core.execution.debugger",
+    "core.tools",
+    "core.tools.dependency_installer",
+]
+
+
+def _make_stubs() -> dict:
+    """Return a {name: module} mapping of all required stubs."""
+
+    def _clean(text: str) -> str:
+        return text
+
+    def _clean_and_parse(text: str) -> dict:
+        text = text.strip()
+        start = text.find("{")
+        end = text.rfind("}") + 1
+        if start == -1 or end == 0:
+            raise ValueError("No JSON object found")
+        return json.loads(text[start:end])
+
+    def _mod(name: str, **attrs) -> ModuleType:
+        mod = ModuleType(name)
+        for k, v in attrs.items():
+            setattr(mod, k, v)
+        return mod
+
+    return {
+        "core.llm": _mod("core.llm", LLMClient=MagicMock(name="LLMClient")),
+        "core.ai.response_cleaner": _mod(
+            "core.ai.response_cleaner", clean=_clean, clean_and_parse=_clean_and_parse
+        ),
+        "core.execution": _mod("core.execution"),
+        "core.execution.runner": _mod("core.execution.runner", CodeRunner=MagicMock()),
+        "core.execution.debugger": _mod("core.execution.debugger", Debugger=MagicMock()),
+        "core.tools": _mod("core.tools"),
+        "core.tools.dependency_installer": _mod(
+            "core.tools.dependency_installer", DependencyInstaller=MagicMock()
+        ),
+    }
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _install_stubs():
+    """Register dependency stubs for the duration of the test session."""
+    stubs = _make_stubs()
+    originals = {name: sys.modules.get(name) for name in stubs}
+    sys.modules.update(stubs)
+    yield
+    for name, original in originals.items():
+        if original is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = original
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
