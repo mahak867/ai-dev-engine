@@ -306,7 +306,6 @@ class Orchestrator:
     # ── PUBLIC: full-stack ────────────────────────────────────────
     def generate_fullstack(self, name: str, request: str, output_dir: str = ".") -> str:
         from core.ai.fullstack_pipeline import run_fullstack_generation
-        from core.ai.fullstack_pipeline import run_fullstack_generation
         from core.ai.senior_team import tech_lead_review, backend_review, frontend_review, final_review, apply_corrections
         if self.dry_run:
             print("\n[dry-run] Would run: 8-step full-stack pipeline")
