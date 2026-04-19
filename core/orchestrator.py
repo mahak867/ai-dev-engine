@@ -277,9 +277,34 @@ class Orchestrator:
         self._auto_debug(path, data)
         return path
 
+    # ── PUBLIC: edit existing app ─────────────────────────────────
+    def edit_app(self, project_path: str, instruction: str) -> dict:
+        """Apply an edit instruction to an existing generated project.
+
+        Returns a dict of {relative_path: new_content} for every file changed.
+        """
+        from core.ai.editor import AppEditor
+        editor = AppEditor(project_path)
+        generate_fn = self.llm.generate if not self.dry_run else (
+            lambda prompt: "NO_CHANGES"
+        )
+        return editor.edit(instruction, generate_fn)
+
+    # ── PUBLIC: add feature to existing app ───────────────────────
+    def add_feature(self, project_path: str, feature: str) -> list:
+        """Add a new feature to an existing generated project.
+
+        Returns a list of file paths that were created/changed.
+        """
+        from core.ai.editor import AppEditor
+        editor = AppEditor(project_path)
+        generate_fn = self.llm.generate if not self.dry_run else (
+            lambda prompt: '{"files":[]}'
+        )
+        return editor.add_feature(feature, generate_fn)
+
     # ── PUBLIC: full-stack ────────────────────────────────────────
-    def generate_fullstack(self, name: str, request: str) -> str:
-        from core.ai.fullstack_pipeline import run_fullstack_generation
+    def generate_fullstack(self, name: str, request: str, output_dir: str = ".") -> str:
         from core.ai.fullstack_pipeline import run_fullstack_generation
         from core.ai.senior_team import tech_lead_review, backend_review, frontend_review, final_review, apply_corrections
         if self.dry_run:
@@ -297,7 +322,8 @@ class Orchestrator:
             for i, s in enumerate(steps, 1):
                 print(f"  Step {i}: {s}")
             data = self._dry_run_data(name)
-            path = self._write_files(name, data["files"])
+            project_path = str(Path(output_dir) / name)
+            path = self._write_files(project_path, data["files"])
             print(f"\n  ✅ Dry-run complete. Placeholder files at: {path}")
             return path
 
@@ -362,7 +388,8 @@ class Orchestrator:
             raise Exception("No files were generated.")
 
         print(f"\n📂 Writing {len(data['files'])} files...")
-        path = self._write_files(name, data["files"])
+        project_path = str(Path(output_dir) / name)
+        path = self._write_files(project_path, data["files"])
         # Auto-fix common generation errors
         from core.ai.post_fixer import fix_project, print_run_instructions
         fix_project(path, request=request, spec=spec)
