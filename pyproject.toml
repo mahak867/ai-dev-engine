@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "apex-ai-dev-engine"
-version = "2.0.0"
-description = "APEX AI Dev Engine — competition & investor-grade full-stack app generator powered by Kimi K2, Qwen3-32B, and Llama 3.3 70B"
+version = "3.0.0"
+description = "APEX AI Dev Engine v3 — multi-agent, self-healing, free-model-first app generator"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-keywords = ["ai", "code-generation", "full-stack", "cli", "llm"]
+keywords = ["ai", "code-generation", "multi-agent", "llm", "groq", "ollama"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -19,7 +19,6 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Topic :: Software Development :: Code Generators",
 ]
 dependencies = [
     "requests>=2.31",
@@ -29,9 +28,8 @@ dependencies = [
 apex = "cli:main"
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=8.0",
-]
+dev = ["pytest>=8.0"]
+web = ["flask>=3.0"]
 
 [tool.setuptools.packages.find]
 where = ["."]
