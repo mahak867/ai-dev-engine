@@ -1,89 +1,95 @@
 """
 APEX AI Dev Engine v3 — Multi-Provider Router
-Supports: Groq, OpenRouter, Together AI, Ollama, Mistral, Cohere
+Free-first: Groq (free tier) + Ollama (local) as primary.
+Optional paid providers (OpenRouter, Together, Mistral) only used
+if their API keys are explicitly set in .env.
 """
 from __future__ import annotations
 import os, json, time, logging
-from typing import Iterator, Optional
+from typing import Iterator
 import requests
 
 log = logging.getLogger("apex.provider")
 
 # ── Model catalogue ────────────────────────────────────────────────────────────
 MODELS = {
-    # Groq (free, ultra-fast)
-    "groq/llama-3.3-70b":        {"provider": "groq",       "ctx": 128_000},
-    "groq/llama-3.1-8b":         {"provider": "groq",       "ctx": 128_000},
-    "groq/mixtral-8x7b":         {"provider": "groq",       "ctx":  32_768},
-    "groq/gemma2-9b":            {"provider": "groq",       "ctx":   8_192},
-    "groq/qwen-qwq-32b":         {"provider": "groq",       "ctx": 128_000},
-    # Together AI
-    "together/llama-3.3-70b":    {"provider": "together",   "ctx": 128_000},
-    "together/qwen2.5-72b":      {"provider": "together",   "ctx": 128_000},
-    "together/deepseek-r1":      {"provider": "together",   "ctx": 163_840},
-    # OpenRouter (access to many models including Kimi, Gemini, etc.)
-    "or/kimi-k2":                {"provider": "openrouter", "ctx": 131_072},
-    "or/gemini-2.5-pro":         {"provider": "openrouter", "ctx":1_048_576},
-    "or/deepseek-r1":            {"provider": "openrouter", "ctx": 163_840},
-    "or/qwen3-235b":             {"provider": "openrouter", "ctx":  40_960},
-    "or/codex-mini":             {"provider": "openrouter", "ctx":  32_000},
-    # Ollama (local, free)
-    "ollama/llama3.3":           {"provider": "ollama",     "ctx": 128_000},
-    "ollama/qwen2.5-coder:32b":  {"provider": "ollama",     "ctx": 128_000},
-    "ollama/deepseek-coder-v2":  {"provider": "ollama",     "ctx": 163_840},
-    "ollama/codellama:70b":      {"provider": "ollama",     "ctx": 100_000},
-    # Mistral
-    "mistral/codestral":         {"provider": "mistral",    "ctx": 256_000},
-    "mistral/mistral-large":     {"provider": "mistral",    "ctx": 128_000},
+    # ── FREE: Groq (fast, free tier) ─────────────────────────────────────────
+    "groq/llama-3.3-70b":        {"provider": "groq", "ctx": 128_000, "free": True},
+    "groq/llama-3.1-8b":         {"provider": "groq", "ctx": 128_000, "free": True},
+    "groq/mixtral-8x7b":         {"provider": "groq", "ctx":  32_768, "free": True},
+    "groq/gemma2-9b":            {"provider": "groq", "ctx":   8_192, "free": True},
+    "groq/qwen-qwq-32b":         {"provider": "groq", "ctx": 128_000, "free": True},
+    # ── FREE: Ollama (local, fully offline) ───────────────────────────────────
+    "ollama/llama3.3":           {"provider": "ollama", "ctx": 128_000, "free": True},
+    "ollama/qwen2.5-coder:32b":  {"provider": "ollama", "ctx": 128_000, "free": True},
+    "ollama/deepseek-coder-v2":  {"provider": "ollama", "ctx": 163_840, "free": True},
+    "ollama/codellama:70b":      {"provider": "ollama", "ctx": 100_000, "free": True},
+    "ollama/qwen2.5:72b":        {"provider": "ollama", "ctx": 128_000, "free": True},
+    # ── OPTIONAL paid (only used if key is set) ───────────────────────────────
+    "or/kimi-k2":                {"provider": "openrouter", "ctx": 131_072, "free": False},
+    "or/deepseek-r1":            {"provider": "openrouter", "ctx": 163_840, "free": False},
+    "or/gemini-2.5-pro":         {"provider": "openrouter", "ctx":1_048_576,"free": False},
+    "together/llama-3.3-70b":    {"provider": "together",   "ctx": 128_000, "free": False},
+    "together/deepseek-r1":      {"provider": "together",   "ctx": 163_840, "free": False},
+    "mistral/codestral":         {"provider": "mistral",    "ctx": 256_000, "free": False},
 }
 
-# ── Default cascade (tries in order until one works) ──────────────────────────
+FREE_MODELS  = [m for m, i in MODELS.items() if i["free"]]
+PAID_MODELS  = [m for m, i in MODELS.items() if not i["free"]]
+
+# ── Cascades — FREE first, paid only if key exists ────────────────────────────
 DEFAULT_CASCADE = [
     "groq/llama-3.3-70b",
     "groq/qwen-qwq-32b",
     "ollama/qwen2.5-coder:32b",
-    "together/qwen2.5-72b",
+    "ollama/llama3.3",
 ]
 CODING_CASCADE = [
     "groq/qwen-qwq-32b",
     "groq/llama-3.3-70b",
-    "mistral/codestral",
     "ollama/qwen2.5-coder:32b",
-    "together/deepseek-r1",
-    "or/deepseek-r1",
+    "ollama/deepseek-coder-v2",
 ]
 REASONING_CASCADE = [
     "groq/qwen-qwq-32b",
-    "together/deepseek-r1",
-    "or/deepseek-r1",
-    "or/gemini-2.5-pro",
+    "groq/llama-3.3-70b",
+    "ollama/qwen2.5:72b",
 ]
 
 
+def _paid_fallback(provider: str, model_key: str) -> list[str]:
+    """Return paid model only if its key is configured."""
+    key_map = {
+        "openrouter": "OPENROUTER_API_KEY",
+        "together":   "TOGETHER_API_KEY",
+        "mistral":    "MISTRAL_API_KEY",
+    }
+    env_key = key_map.get(provider, "")
+    if env_key and os.getenv(env_key):
+        return [model_key]
+    return []
+
+
 class LLMProvider:
-    """Unified LLM interface with cascade fallback and streaming."""
+    """Unified LLM interface — free-first cascade with optional paid fallback."""
 
     def __init__(self, model: str = "auto", temperature: float = 0.2):
-        self.model = model
+        self.model       = model
         self.temperature = temperature
-        self._session = requests.Session()
+        self._session    = requests.Session()
         self._session.headers.update({"Content-Type": "application/json"})
 
-    # ── public API ─────────────────────────────────────────────────────────────
+    # ── Public API ─────────────────────────────────────────────────────────────
     def complete(self, messages: list[dict], max_tokens: int = 8192) -> str:
-        """Blocking completion with cascade fallback."""
-        cascade = self._resolve_cascade()
-        for model in cascade:
+        for model in self._resolve_cascade():
             try:
                 return self._call(model, messages, max_tokens, stream=False)
             except Exception as e:
                 log.warning(f"[{model}] failed: {e}, trying next...")
-        raise RuntimeError("All providers exhausted.")
+        raise RuntimeError("All providers exhausted — set GROQ_API_KEY for free access.")
 
     def stream(self, messages: list[dict], max_tokens: int = 8192) -> Iterator[str]:
-        """Streaming completion with cascade fallback."""
-        cascade = self._resolve_cascade()
-        for model in cascade:
+        for model in self._resolve_cascade():
             try:
                 yield from self._call(model, messages, max_tokens, stream=True)
                 return
@@ -91,31 +97,36 @@ class LLMProvider:
                 log.warning(f"[{model}] stream failed: {e}, trying next...")
         raise RuntimeError("All providers exhausted.")
 
-    # ── internals ──────────────────────────────────────────────────────────────
+    # ── Cascade resolution ─────────────────────────────────────────────────────
     def _resolve_cascade(self) -> list[str]:
-        if self.model == "auto":      return DEFAULT_CASCADE
-        if self.model == "coding":    return CODING_CASCADE
-        if self.model == "reasoning": return REASONING_CASCADE
-        return [self.model]
+        if self.model == "auto":      base = DEFAULT_CASCADE
+        elif self.model == "coding":  base = CODING_CASCADE
+        elif self.model == "reasoning": base = REASONING_CASCADE
+        else:                         return [self.model]
 
+        # append optional paid models if keys present
+        extras: list[str] = []
+        for m, info in MODELS.items():
+            if not info["free"]:
+                extras += _paid_fallback(info["provider"], m)
+        return base + extras
+
+    # ── Internal dispatch ──────────────────────────────────────────────────────
     def _call(self, model: str, messages: list, max_tokens: int, stream: bool):
-        info     = MODELS[model]
-        provider = info["provider"]
-        dispatch = {
+        provider = MODELS[model]["provider"]
+        return {
             "groq":       self._groq,
-            "together":   self._together,
-            "openrouter": self._openrouter,
             "ollama":     self._ollama,
+            "openrouter": self._openrouter,
+            "together":   self._together,
             "mistral":    self._mistral,
-        }
-        return dispatch[provider](model, messages, max_tokens, stream)
+        }[provider](model, messages, max_tokens, stream)
 
-    # ── Groq ───────────────────────────────────────────────────────────────────
+    # ── Groq (FREE) ────────────────────────────────────────────────────────────
     def _groq(self, model, messages, max_tokens, stream):
         key = os.getenv("GROQ_API_KEY", "")
-        if not key: raise RuntimeError("GROQ_API_KEY not set")
-        model_id = model.split("/", 1)[1]
-        # map display names → groq IDs
+        if not key:
+            raise RuntimeError("GROQ_API_KEY not set — free tier, get it at console.groq.com")
         groq_ids = {
             "llama-3.3-70b": "llama-3.3-70b-versatile",
             "llama-3.1-8b":  "llama-3.1-8b-instant",
@@ -123,53 +134,20 @@ class LLMProvider:
             "gemma2-9b":     "gemma2-9b-it",
             "qwen-qwq-32b":  "qwen-qwq-32b",
         }
-        real_id = groq_ids.get(model_id, model_id)
+        model_id = groq_ids.get(model.split("/", 1)[1], model.split("/", 1)[1])
         return self._openai_compat(
             "https://api.groq.com/openai/v1/chat/completions",
-            key, real_id, messages, max_tokens, stream,
+            key, model_id, messages, max_tokens, stream,
         )
 
-    # ── Together AI ────────────────────────────────────────────────────────────
-    def _together(self, model, messages, max_tokens, stream):
-        key = os.getenv("TOGETHER_API_KEY", "")
-        if not key: raise RuntimeError("TOGETHER_API_KEY not set")
-        together_ids = {
-            "llama-3.3-70b": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-            "qwen2.5-72b":   "Qwen/Qwen2.5-72B-Instruct-Turbo",
-            "deepseek-r1":   "deepseek-ai/DeepSeek-R1",
-        }
-        model_id = model.split("/", 1)[1]
-        real_id  = together_ids.get(model_id, model_id)
-        return self._openai_compat(
-            "https://api.together.xyz/v1/chat/completions",
-            key, real_id, messages, max_tokens, stream,
-        )
-
-    # ── OpenRouter ─────────────────────────────────────────────────────────────
-    def _openrouter(self, model, messages, max_tokens, stream):
-        key = os.getenv("OPENROUTER_API_KEY", "")
-        if not key: raise RuntimeError("OPENROUTER_API_KEY not set")
-        or_ids = {
-            "kimi-k2":       "moonshotai/kimi-k2",
-            "gemini-2.5-pro":"google/gemini-2.5-pro",
-            "deepseek-r1":   "deepseek/deepseek-r1",
-            "qwen3-235b":    "qwen/qwen3-235b-a22b",
-            "codex-mini":    "openai/codex-mini",
-        }
-        model_id = model.split("/", 1)[1]
-        real_id  = or_ids.get(model_id, model_id)
-        return self._openai_compat(
-            "https://openrouter.ai/api/v1/chat/completions",
-            key, real_id, messages, max_tokens, stream,
-            extra_headers={"HTTP-Referer": "https://github.com/mahak867/ai-dev-engine"},
-        )
-
-    # ── Ollama (local) ─────────────────────────────────────────────────────────
+    # ── Ollama (FREE / local) ──────────────────────────────────────────────────
     def _ollama(self, model, messages, max_tokens, stream):
         host     = os.getenv("OLLAMA_HOST", "http://localhost:11434")
         model_id = model.split("/", 1)[1]
-        payload  = {"model": model_id, "messages": messages, "stream": stream,
-                    "options": {"temperature": self.temperature, "num_predict": max_tokens}}
+        payload  = {
+            "model": model_id, "messages": messages, "stream": stream,
+            "options": {"temperature": self.temperature, "num_predict": max_tokens},
+        }
         r = self._session.post(f"{host}/api/chat", json=payload, stream=stream, timeout=120)
         r.raise_for_status()
         if not stream:
@@ -183,32 +161,57 @@ class LLMProvider:
                     if chunk.get("done"): break
         return _gen()
 
-    # ── Mistral ────────────────────────────────────────────────────────────────
+    # ── OpenRouter (optional paid) ─────────────────────────────────────────────
+    def _openrouter(self, model, messages, max_tokens, stream):
+        key = os.getenv("OPENROUTER_API_KEY", "")
+        if not key: raise RuntimeError("OPENROUTER_API_KEY not set")
+        or_ids = {
+            "kimi-k2":        "moonshotai/kimi-k2",
+            "deepseek-r1":    "deepseek/deepseek-r1",
+            "gemini-2.5-pro": "google/gemini-2.5-pro",
+        }
+        model_id = or_ids.get(model.split("/", 1)[1], model.split("/", 1)[1])
+        return self._openai_compat(
+            "https://openrouter.ai/api/v1/chat/completions",
+            key, model_id, messages, max_tokens, stream,
+            extra_headers={"HTTP-Referer": "https://github.com/mahak867/ai-dev-engine"},
+        )
+
+    # ── Together AI (optional paid) ────────────────────────────────────────────
+    def _together(self, model, messages, max_tokens, stream):
+        key = os.getenv("TOGETHER_API_KEY", "")
+        if not key: raise RuntimeError("TOGETHER_API_KEY not set")
+        together_ids = {
+            "llama-3.3-70b": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            "deepseek-r1":   "deepseek-ai/DeepSeek-R1",
+        }
+        model_id = together_ids.get(model.split("/", 1)[1], model.split("/", 1)[1])
+        return self._openai_compat(
+            "https://api.together.xyz/v1/chat/completions",
+            key, model_id, messages, max_tokens, stream,
+        )
+
+    # ── Mistral (optional paid) ────────────────────────────────────────────────
     def _mistral(self, model, messages, max_tokens, stream):
         key = os.getenv("MISTRAL_API_KEY", "")
         if not key: raise RuntimeError("MISTRAL_API_KEY not set")
-        mistral_ids = {"codestral": "codestral-latest", "mistral-large": "mistral-large-latest"}
-        model_id = model.split("/", 1)[1]
-        real_id  = mistral_ids.get(model_id, model_id)
+        ids = {"codestral": "codestral-latest"}
+        model_id = ids.get(model.split("/", 1)[1], model.split("/", 1)[1])
         return self._openai_compat(
             "https://api.mistral.ai/v1/chat/completions",
-            key, real_id, messages, max_tokens, stream,
+            key, model_id, messages, max_tokens, stream,
         )
 
-    # ── OpenAI-compatible helper ───────────────────────────────────────────────
+    # ── OpenAI-compat helper ───────────────────────────────────────────────────
     def _openai_compat(self, url, key, model_id, messages, max_tokens, stream,
                        extra_headers: dict | None = None):
         headers = {"Authorization": f"Bearer {key}"}
         if extra_headers: headers.update(extra_headers)
         payload = {
-            "model":       model_id,
-            "messages":    messages,
-            "max_tokens":  max_tokens,
-            "temperature": self.temperature,
-            "stream":      stream,
+            "model": model_id, "messages": messages,
+            "max_tokens": max_tokens, "temperature": self.temperature, "stream": stream,
         }
-        r = self._session.post(url, json=payload, headers=headers,
-                               stream=stream, timeout=120)
+        r = self._session.post(url, json=payload, headers=headers, stream=stream, timeout=120)
         r.raise_for_status()
         if not stream:
             return r.json()["choices"][0]["message"]["content"]
@@ -218,8 +221,7 @@ class LLMProvider:
                     data = line[6:]
                     if data == b"[DONE]": break
                     try:
-                        chunk = json.loads(data)
-                        if token := chunk["choices"][0].get("delta", {}).get("content", ""):
+                        if token := json.loads(data)["choices"][0].get("delta", {}).get("content", ""):
                             yield token
                     except Exception:
                         pass
