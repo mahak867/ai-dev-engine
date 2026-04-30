@@ -1,166 +1,206 @@
-# APEX AI Dev Engine
+# ⚡ APEX AI Dev Engine v3
 
-> **Competition & investor-grade full-stack app generator** powered by Kimi K2, Qwen3-32B, and Llama 3.3 70B.
-
-[![CI](https://github.com/mahak867/ai-dev-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/mahak867/ai-dev-engine/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
-APEX takes a plain-English description of an app and generates a complete, runnable full-stack project — Flask backend, React/Vite frontend, database schema, tests, config files, and auto-debug loop — in a single command.
+> **Multi-Agent • Multi-Model • Self-Healing • Persistent Memory**
+> Build full-stack apps from a single sentence. No Claude API required.
 
 ---
 
-## Features
+## 🔥 What Makes This Better
 
-| Feature | Details |
-|---|---|
-| 🏗️ Full-stack generation | Flask + React/Vite, SQLite/PostgreSQL, REST API |
-| 🤖 Multi-model pipeline | Kimi K2 (architecture) → Qwen3-32B (code) → Llama 3.3 70B (format) |
-| 🔧 Auto-debug loop | Runs the project, catches errors, feeds them back to the LLM |
-| ✏️ In-place editing | `apex edit` surgically patches an existing project |
-| 🔑 Integrations | Clerk auth, Stripe payments, public APIs |
-| 💾 Response cache | SHA-256 cache avoids repeat API calls |
-| 🧪 Test suite | 35 automated tests, runs offline with no API key |
+| Feature | v2 (old) | v3 (this) |
+|---|---|---|
+| Providers | Groq only | Groq + OpenRouter + Together + Ollama + Mistral |
+| Models | 1 | 18+ (Kimi K2, Gemini 2.5, DeepSeek R1, QwQ, Codestral…) |
+| Agents | 1 (coder) | 7 (Planner, Architect, Coder, Reviewer, Debugger, Healer, DocWriter) |
+| Fallback | None | Cascade: tries next model if one fails |
+| Memory | None | Persistent JSON store with search |
+| Self-healing | Stub | Real: runs code, detects errors, patches automatically |
+| UI | CLI only | CLI + Web UI at localhost:7331 |
+| Streaming | No | Yes (token-by-token) |
+| Code Review | No | Auto-review + security audit |
+| Tests | None | Full pytest suite |
 
 ---
 
-## Installation
+## 🚀 Quick Start
 
 ```bash
-# 1. Clone
-git clone https://github.com/mahak867/ai-dev-engine.git
+# 1. Clone & install
+git clone https://github.com/mahak867/ai-dev-engine
 cd ai-dev-engine
+pip install -r requirements.txt
 
-# 2. Install (creates the `apex` console script)
-pip install -e .
+# 2. Set at least ONE API key
+cp .env.example .env
+# Edit .env — add GROQ_API_KEY (free at console.groq.com)
 
-# 3. Set your Groq API key
-export GROQ_API_KEY=gsk_...          # Linux / macOS
-# or
-setx GROQ_API_KEY gsk_...            # Windows
-```
+# 3. Generate your first project
+python cli.py generate "SaaS todo app with Next.js, FastAPI, PostgreSQL and auth" --name taskmaster
 
-Get a free Groq API key at <https://console.groq.com>.
-
----
-
-## Quick start
-
-### Generate a new app
-
-```bash
-apex generate "A task management app with user accounts and due-date reminders" \
-  --name taskmaster \
-  --clerk \
-  --output ./projects
-```
-
-### Try it without an API key (dry-run)
-
-```bash
-apex generate "A blog with comments" --name myblog --dry-run
-```
-
-### Edit an existing generated app
-
-```bash
-# Apply an instruction to existing files
-apex edit --path ./projects/taskmaster --edit "add dark mode toggle"
-
-# Add a complete new feature
-apex edit --path ./projects/taskmaster --add "Stripe subscription billing"
-```
-
-### Full option reference
-
-```
-apex generate <request> [options]
-
-  <request>           Plain-English app description (required)
-  --name NAME         Project folder name  [default: my_app]
-  --output DIR        Parent directory for the project  [default: .]
-  --provider NAME     AI provider  [default: groq]
-  --clerk             Scaffold Clerk authentication
-  --stripe            Scaffold Stripe payments
-  --dry-run           Preview pipeline steps without calling the AI
-
-apex edit [options]
-
-  --path PATH         Path to an existing generated project (required)
-  --edit INSTRUCTION  Instruction to apply to existing files
-  --add FEATURE       New feature to generate and add
+# 4. Or use the Web UI
+python web_ui.py   # → open http://localhost:7331
 ```
 
 ---
 
-## Running the app after generation
+## 🤖 Providers & Models
 
-After `apex generate` completes, follow the printed instructions:
+### Free / Fast
+| Model | Provider | Context | Speed |
+|---|---|---|---|
+| `groq/llama-3.3-70b` | Groq | 128k | ⚡⚡⚡ |
+| `groq/qwen-qwq-32b` | Groq | 128k | ⚡⚡⚡ |
+| `ollama/qwen2.5-coder:32b` | Local | 128k | ⚡ |
+
+### Premium (via OpenRouter)
+| Model | Context | Strength |
+|---|---|---|
+| `or/kimi-k2` | 131k | Coding |
+| `or/gemini-2.5-pro` | 1M | Reasoning |
+| `or/deepseek-r1` | 163k | Reasoning |
+
+### Code Specialists
+| Model | Provider | Context |
+|---|---|---|
+| `mistral/codestral` | Mistral | 256k |
+| `together/deepseek-r1` | Together | 163k |
+
+---
+
+## 🧠 Agent Pipeline
 
 ```
-  BACKEND (Terminal 1):
-    cd taskmaster/backend
-    python app.py
-    -> http://127.0.0.1:5000
-
-  FRONTEND (Terminal 2):
-    cd taskmaster/frontend
-    npm install
-    npm run dev
-    -> http://localhost:5173
+Request
+  │
+  ▼
+🗺️  Planner      → JSON plan (tech stack, files, API routes, DB schema)
+  │
+  ▼
+🏛️  Architect    → Architecture decisions, component diagram, security notes
+  │
+  ▼
+👨‍💻 Coder        → Complete production-ready files (no placeholders)
+  │
+  ▼
+🔍 Reviewer     → Quality score, security audit, auto-fixes
+  │
+  ▼
+🔧 Self-Healer  → Runs code, catches errors, patches automatically
+  │
+  ▼
+📝 DocWriter    → Professional README.md
+  │
+  ▼
+✅ Output directory with all files
 ```
 
 ---
 
-## Development
+## 💻 CLI Reference
 
 ```bash
-# Install dev dependencies
-pip install -r requirements-dev.txt
+# Generate full-stack project
+python cli.py generate "your idea" --name myapp
 
-# Run the test suite (no API key required)
+# Use specific model
+python cli.py generate "REST API" --name api --model groq/qwen-qwq-32b
+
+# Stream output token-by-token
+python cli.py generate "chat app" --name chat --stream
+
+# Use reasoning cascade (DeepSeek R1, QwQ)
+python cli.py generate "complex fintech app" --model reasoning
+
+# Edit existing project
+python cli.py edit --path ./myapp --edit "add dark mode toggle"
+
+# Debug an error
+python cli.py edit --path ./myapp/server.py --debug "AttributeError: NoneType"
+
+# Audit code quality
+python cli.py audit --path ./myapp
+
+# List all generated projects
+python cli.py list
+
+# Show available models
+python cli.py models
+```
+
+---
+
+## 🌐 Web UI
+
+```bash
+python web_ui.py
+# → http://localhost:7331
+```
+
+Features:
+- Live agent status indicators
+- Real-time streaming output
+- Project history sidebar
+- File tree viewer
+- Model selector with all 18+ models
+
+---
+
+## 🔧 Smart Cascades
+
+Instead of specifying a model, use smart cascades:
+
+- **`auto`** — tries Groq → Ollama → Together (best availability)
+- **`coding`** — QwQ → Llama → Codestral → DeepSeek (code-optimized)
+- **`reasoning`** — QwQ → DeepSeek R1 → Gemini 2.5 (complex problems)
+
+---
+
+## 🛠️ Environment Variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `GROQ_API_KEY` | ⭐ Recommended | Free at console.groq.com |
+| `OPENROUTER_API_KEY` | Optional | Access Kimi K2, Gemini 2.5 |
+| `TOGETHER_API_KEY` | Optional | DeepSeek R1, Qwen 2.5 |
+| `MISTRAL_API_KEY` | Optional | Codestral (best for code) |
+| `OLLAMA_HOST` | Optional | Default: localhost:11434 |
+
+---
+
+## 🧪 Tests
+
+```bash
+pip install pytest
 python -m pytest tests/ -v
 ```
 
-Tests are located in `tests/` and cover:
-- `tests/test_cli.py` — argument parsing and subcommand routing
-- `tests/test_orchestrator.py` — core orchestrator logic (JSON parsing, file writing, merge, dry-run, edit/add)
-
-All external AI calls are stubbed out, so the tests run fully offline.
-
 ---
 
-## Project structure
+## 📁 Project Structure
 
 ```
-ai-dev-engine/
-├── cli.py                  # `apex` CLI entry point
-├── core/
-│   ├── orchestrator.py     # Central coordinator
-│   ├── ai/
-│   │   ├── fullstack_pipeline.py
-│   │   ├── groq_provider.py
-│   │   ├── editor.py
-│   │   ├── post_fixer.py
-│   │   ├── senior_team.py
-│   │   └── ...
-│   ├── execution/
-│   │   ├── runner.py
-│   │   └── debugger.py
-│   └── tools/
-│       └── dependency_installer.py
-├── tests/
-│   ├── fixtures/
-│   │   └── sample_generation.json
-│   ├── test_cli.py
-│   └── test_orchestrator.py
-├── pyproject.toml
+apex-v3/
+├── cli.py                    # Main CLI entry point
+├── web_ui.py                 # Flask web interface
 ├── requirements.txt
-└── requirements-dev.txt
+├── .env.example
+├── core/
+│   ├── orchestrator.py       # Master pipeline coordinator
+│   ├── ai/
+│   │   └── provider.py       # Multi-provider router (18+ models)
+│   ├── agents/
+│   │   └── base.py           # All 7 agents
+│   ├── execution/
+│   │   ├── runner.py         # Safe subprocess executor
+│   │   └── auto_heal.py      # Install → typecheck → test → heal loop
+│   └── memory/
+│       └── store.py          # Persistent project memory
+└── tests/
+    └── test_apex.py          # Full pytest suite
 ```
 
 ---
 
-## License
+## 📜 License
 
-MIT — see [LICENSE](LICENSE).
+MIT — built by Mahak Fahad

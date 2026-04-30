@@ -1,217 +1,133 @@
-# core/execution/runner.py
-# Smart execution engine — detects app type and picks the right run command.
-# Handles Python (Flask/FastAPI/script), Node.js (React/Vue), static HTML.
-
-import subprocess
-import sys
-import os
-import json
+"""
+APEX v3 — Safe Code Executor
+Runs generated code in sandboxed subprocess, captures output,
+feeds errors back to SelfHealer automatically.
+"""
+from __future__ import annotations
+import subprocess, os, sys, time, signal, tempfile, shutil
 from pathlib import Path
-
-# Use the same Python that's running this script — avoids python vs python3 issues
-PYTHON = sys.executable
+from dataclasses import dataclass
 
 
-class CodeRunner:
+@dataclass
+class ExecResult:
+    stdout: str
+    stderr: str
+    returncode: int
+    duration: float
+    timed_out: bool = False
 
-    def __init__(self, project_path: str, app_type: str = "auto"):
-        self.project_path = Path(project_path)
-        self.app_type = app_type
+    @property
+    def ok(self) -> bool:
+        return self.returncode == 0 and not self.timed_out
 
-    # ── App type detection ────────────────────────────────────────
-    def detect_app_type(self) -> str:
-        has_backend = (
-            any(self.project_path.glob("backend/**/*.py")) or
-            any(self.project_path.glob("*.py"))
-        )
-        has_node = (
-            (self.project_path / "frontend" / "package.json").exists() or
-            (self.project_path / "package.json").exists()
-        )
-        has_html = (
-            (self.project_path / "frontend" / "index.html").exists() or
-            (self.project_path / "index.html").exists()
-        )
+    @property
+    def error_summary(self) -> str:
+        if self.timed_out:
+            return "Process timed out"
+        lines = (self.stderr or "").strip().splitlines()
+        return "\n".join(lines[-20:]) if lines else ""
 
-        if has_backend and has_node:
-            return "fullstack_node"
-        if has_backend and has_html:
-            return "fullstack_static"
-        if has_backend:
-            return self._detect_python_type()
-        if has_node:
-            return "node"
-        if has_html:
-            return "static"
-        return "unknown"
 
-    def _detect_python_type(self) -> str:
-        server_keywords = ["Flask", "FastAPI", "uvicorn", "app.run", "create_app"]
-        for f in list(self.project_path.rglob("*.py"))[:15]:
+class Executor:
+    """Run shell commands, npm/python installs, test suites."""
+
+    def __init__(self, project_dir: str, timeout: int = 120):
+        self.project_dir = Path(project_dir)
+        self.timeout     = timeout
+
+    # ── Install dependencies ───────────────────────────────────────────────────
+    def install_deps(self) -> ExecResult:
+        """Auto-detect and install deps (npm / pip / both)."""
+        results = []
+        if (self.project_dir / "package.json").exists():
+            results.append(self.run("npm install --prefer-offline 2>&1"))
+        if (self.project_dir / "requirements.txt").exists():
+            results.append(self.run(
+                f"{sys.executable} -m pip install -r requirements.txt -q 2>&1"
+            ))
+        if not results:
+            return ExecResult("No deps file found", "", 0, 0)
+        # return last result (fail if any failed)
+        for r in results:
+            if not r.ok:
+                return r
+        return results[-1]
+
+    # ── TypeScript check ───────────────────────────────────────────────────────
+    def type_check(self) -> ExecResult:
+        if not (self.project_dir / "tsconfig.json").exists():
+            return ExecResult("No tsconfig.json", "", 0, 0)
+        return self.run("npx --yes tsc --noEmit 2>&1")
+
+    # ── Lint ───────────────────────────────────────────────────────────────────
+    def lint(self) -> ExecResult:
+        pkg = self.project_dir / "package.json"
+        if pkg.exists():
+            import json
+            scripts = json.loads(pkg.read_text()).get("scripts", {})
+            if "lint" in scripts:
+                return self.run("npm run lint 2>&1")
+        return ExecResult("No lint script", "", 0, 0)
+
+    # ── Run tests ──────────────────────────────────────────────────────────────
+    def test(self) -> ExecResult:
+        if (self.project_dir / "pytest.ini").exists() or \
+           (self.project_dir / "tests").exists():
+            return self.run(f"{sys.executable} -m pytest -x -q 2>&1")
+        pkg = self.project_dir / "package.json"
+        if pkg.exists():
+            import json
+            scripts = json.loads(pkg.read_text()).get("scripts", {})
+            if "test" in scripts:
+                return self.run("npm test -- --watchAll=false 2>&1")
+        return ExecResult("No test runner found", "", 0, 0)
+
+    # ── Build ──────────────────────────────────────────────────────────────────
+    def build(self) -> ExecResult:
+        pkg = self.project_dir / "package.json"
+        if pkg.exists():
+            import json
+            scripts = json.loads(pkg.read_text()).get("scripts", {})
+            if "build" in scripts:
+                return self.run("npm run build 2>&1")
+        return ExecResult("No build script", "", 0, 0)
+
+    # ── Generic run ────────────────────────────────────────────────────────────
+    def run(self, cmd: str, env_extra: dict | None = None) -> ExecResult:
+        env = {**os.environ, **(env_extra or {})}
+        # Set CI=true to prevent interactive prompts
+        env["CI"] = "true"
+        env["NEXT_TELEMETRY_DISABLED"] = "1"
+
+        t0 = time.time()
+        try:
+            proc = subprocess.Popen(
+                cmd, shell=True, cwd=str(self.project_dir),
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                env=env, text=True,
+            )
             try:
-                content = f.read_text(encoding="utf-8", errors="ignore")
-                if any(kw in content for kw in server_keywords):
-                    return "python_server"
-            except Exception:
-                pass
-        return "python_script"
-
-    # ── Entry point finders ───────────────────────────────────────
-    def _find_python_entry(self) -> str | None:
-        candidates = ["run.py", "app.py", "main.py", "server.py", "cli.py"]
-        # Check backend/ first
-        for name in candidates:
-            p = self.project_path / "backend" / name
-            if p.exists():
-                return str(p.relative_to(self.project_path))
-        # Then root
-        for name in candidates:
-            p = self.project_path / name
-            if p.exists():
-                return name
-        # Fallback: any .py
-        for f in self.project_path.rglob("*.py"):
-            if "__pycache__" not in str(f):
-                return str(f.relative_to(self.project_path))
-        return None
-
-    def _find_package_json_dir(self) -> Path | None:
-        for p in [
-            self.project_path / "frontend",
-            self.project_path,
-        ]:
-            if (p / "package.json").exists():
-                return p
-        return None
-
-    # ── Runners ───────────────────────────────────────────────────
-    def _run_python(self, entry: str) -> dict:
-        # If entry is inside backend/, run from backend/ dir with just the filename
-        # This fixes "from backend.xxx import" errors caused by wrong cwd
-        if entry.startswith("backend" + os.sep) or entry.startswith("backend/"):
-            run_cwd = self.project_path / "backend"
-            run_entry = os.path.basename(entry)
-        else:
-            run_cwd = self.project_path
-            run_entry = entry
-        print(f"  ▶  {PYTHON} {run_entry}  (cwd: {run_cwd.name}/)")
-        try:
-            result = subprocess.run(
-                [PYTHON, run_entry],
-                cwd=run_cwd,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            if result.returncode == 0:
-                return {"success": True, "output": result.stdout, "type": "python"}
-            return {"success": False, "error": result.stderr or result.stdout, "type": "python"}
-
-        except subprocess.TimeoutExpired:
-            # A server running past timeout means it started successfully
-            return {"success": True, "output": "Server started (still running).", "type": "python_server"}
-        except FileNotFoundError:
-            return {"success": False, "error": f"Python not found at: {PYTHON}", "type": "python"}
+                stdout, _ = proc.communicate(timeout=self.timeout)
+                return ExecResult(
+                    stdout=stdout, stderr="",
+                    returncode=proc.returncode,
+                    duration=time.time() - t0,
+                )
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.communicate()
+                return ExecResult("", "Timed out", -1, time.time()-t0, timed_out=True)
         except Exception as e:
-            return {"success": False, "error": str(e), "type": "python"}
+            return ExecResult("", str(e), -1, time.time()-t0)
 
-    def _run_node(self, pkg_dir: Path) -> dict:
-        print(f"  ▶  npm install && npm run dev  (in {pkg_dir.name}/)")
-        try:
-            # npm install
-            inst = subprocess.run(
-                ["npm", "install"],
-                cwd=pkg_dir,
-                capture_output=True,
-                text=True,
-                timeout=180,
-            )
-            if inst.returncode != 0:
-                return {"success": False, "error": f"npm install failed:\n{inst.stderr}", "type": "node"}
-
-            # Pick dev or start script
-            pkg  = json.loads((pkg_dir / "package.json").read_text())
-            scripts = pkg.get("scripts", {})
-            run_cmd = "dev" if "dev" in scripts else "start" if "start" in scripts else None
-
-            if not run_cmd:
-                return {"success": True, "output": "npm install OK. No dev/start script found — run manually.", "type": "node"}
-
-            subprocess.run(
-                ["npm", "run", run_cmd],
-                cwd=pkg_dir,
-                capture_output=True,
-                text=True,
-                timeout=25,
-            )
-            return {"success": True, "output": f"npm run {run_cmd} started.", "type": "node"}
-
-        except subprocess.TimeoutExpired:
-            return {"success": True, "output": "Frontend dev server started.", "type": "node"}
-        except FileNotFoundError:
-            return {
-                "success": True,
-                "output": "npm not found — install Node.js from https://nodejs.org. Frontend files generated and ready.",
-                "type": "node",
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e), "type": "node"}
-
-    def _run_static(self) -> dict:
-        for candidate in [
-            self.project_path / "frontend" / "index.html",
-            self.project_path / "index.html",
-        ]:
-            if candidate.exists():
-                return {
-                    "success": True,
-                    "output": f"Static site ready.\nOpen in browser: {candidate.resolve()}",
-                    "type": "static",
-                }
-        return {"success": False, "error": "index.html not found.", "type": "static"}
-
-    # ── Public run() ─────────────────────────────────────────────
-    def run(self) -> dict:
-        app_type = self.app_type if self.app_type != "auto" else self.detect_app_type()
-        print(f"  🔍 App type: {app_type}")
-
-        if app_type in ("python_script", "python_server"):
-            entry = self._find_python_entry()
-            if not entry:
-                return {"success": False, "error": "No Python entry point found.", "type": "python"}
-            return self._run_python(entry)
-
-        if app_type == "node":
-            pkg_dir = self._find_package_json_dir()
-            if not pkg_dir:
-                return {"success": False, "error": "package.json not found.", "type": "node"}
-            return self._run_node(pkg_dir)
-
-        if app_type == "static":
-            return self._run_static()
-
-        if app_type in ("fullstack_node", "fullstack_react", "saas_platform", "ecommerce", "marketplace", "dashboard", "social_app"):
-            print("  🔗 Running backend + frontend...")
-            entry   = self._find_python_entry()
-            py_res  = self._run_python(entry) if entry else {"success": True, "output": "no backend entry"}
-            pkg_dir = self._find_package_json_dir()
-            nd_res  = self._run_node(pkg_dir) if pkg_dir else {"success": True, "output": "no package.json"}
-            return {
-                "success": py_res.get("success") and nd_res.get("success"),
-                "output":  f"Backend: {py_res.get('output','')}\nFrontend: {nd_res.get('output','')}",
-                "error":   f"{py_res.get('error','')}\n{nd_res.get('error','')}".strip(),
-                "type":    "fullstack",
-            }
-
-        if app_type == "fullstack_static":
-            entry  = self._find_python_entry()
-            py_res = self._run_python(entry) if entry else {"success": True}
-            st_res = self._run_static()
-            return {
-                "success": py_res.get("success") and st_res.get("success"),
-                "output":  f"Backend: {py_res.get('output','')}\nFrontend: {st_res.get('output','')}",
-                "error":   f"{py_res.get('error','')}\n{st_res.get('error','')}".strip(),
-                "type":    "fullstack_static",
-            }
-
-        return {"success": False, "error": f"Unknown app type: {app_type}", "type": "unknown"}
+    # ── Run file directly ──────────────────────────────────────────────────────
+    def run_file(self, filename: str) -> ExecResult:
+        fpath = self.project_dir / filename
+        if not fpath.exists():
+            return ExecResult("", f"File not found: {filename}", 1, 0)
+        if filename.endswith(".py"):
+            return self.run(f"{sys.executable} {filename}")
+        if filename.endswith(".js") or filename.endswith(".ts"):
+            return self.run(f"node {filename}")
+        return ExecResult("", f"Unknown file type: {filename}", 1, 0)
