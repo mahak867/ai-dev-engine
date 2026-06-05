@@ -28,17 +28,17 @@ class TestProvider:
         p = LLMProvider("auto")
         cascade = p._resolve_cascade()
         assert len(cascade) >= 2
-        assert cascade[0].startswith("groq/")
+        assert cascade[0].startswith("qwen/")
 
     def test_coding_cascade_starts_with_groq(self):
         from core.ai.provider import LLMProvider
         p = LLMProvider("coding")
-        assert p._resolve_cascade()[0].startswith("groq/")
+        assert p._resolve_cascade()[0].startswith("qwen/")
 
     def test_reasoning_cascade_starts_with_groq(self):
         from core.ai.provider import LLMProvider
         p = LLMProvider("reasoning")
-        assert p._resolve_cascade()[0].startswith("groq/")
+        assert p._resolve_cascade()[0].startswith("qwen/")
 
     def test_specific_model_cascade(self):
         from core.ai.provider import LLMProvider
