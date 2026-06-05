@@ -1,11 +1,12 @@
-#!/usr/bin/env python3
+from __future__ import annotations
+from dotenv import load_dotenv
+load_dotenv()
 """
 ╔══════════════════════════════════════════╗
 ║   APEX AI DEV ENGINE  v3.0               ║
 ║   Multi-Agent • Multi-Model • Self-Heal  ║
 ╚══════════════════════════════════════════╝
 """
-from __future__ import annotations
 import argparse, os, sys, time, json, logging
 from pathlib import Path
 
@@ -26,7 +27,7 @@ def dim(t):     return _c("2",        t)
 BANNER = f"""
 {amber("╔══════════════════════════════════════════════════╗")}
 {amber("║")}  {bold("APEX AI DEV ENGINE")}  {_c("38;5;214","v3.0")}                    {amber("║")}
-{amber("║")}  {teal("Groq • OpenRouter • Together • Ollama • Mistral")} {amber("║")}
+{amber("║")}  {teal("Qwen Cloud • Groq • OpenRouter • Ollama")}         {amber("║")}
 {amber("║")}  {muted("Multi-Agent • Self-Healing • Persistent Memory")}  {amber("║")}
 {amber("╚══════════════════════════════════════════════════╝")}
 """
@@ -201,7 +202,7 @@ Examples:
   apex generate "REST API for a blog" --name blog-api --model groq/qwen-qwq-32b
   apex generate "e-commerce store" --name shop --stream
   apex edit --path ./taskmaster --edit "add dark mode"
-  apex edit --path ./app/auth.py --debug "AttributeError: 'NoneType'" 
+  apex edit --path ./app/auth.py --debug "AttributeError: 'NoneType'"
   apex audit --path ./my-project
   apex list
   apex models
@@ -214,7 +215,7 @@ Examples:
     gen.add_argument("request", help="What to build")
     gen.add_argument("--name",      default="my_app",    help="Project name")
     gen.add_argument("--output",    default=".",          help="Output directory")
-    gen.add_argument("--model",     default="auto",       help="Model or cascade (auto|coding|reasoning|groq/llama-3.3-70b|...)")
+    gen.add_argument("--model",     default="auto",       help="Model or cascade")
     gen.add_argument("--stream",    action="store_true",  help="Stream output token by token")
     gen.add_argument("--no-review", action="store_true",  help="Skip code review step")
     gen.add_argument("--dry-run",   action="store_true",  help="No AI calls, stub output")

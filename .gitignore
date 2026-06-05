@@ -7,3 +7,6 @@ __pycache__/
 *.temp
 Thumbs.db
 desktop.ini
+.env
+qwen-test*/
+test-run*/
