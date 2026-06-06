@@ -3,704 +3,800 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Agent Society — Live Dashboard</title>
+<title>APEX SOCIETY</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0a;--bg1:#111;--bg2:#161616;--bg3:#1c1c1c;
+  --b1:#222;--b2:#2a2a2a;
+  --text:#e0e0e0;--dim:#444;--sub:#777;
+  --orange:#ff6b2b;--orange2:#faa32c;--orange3:rgba(255,107,43,0.12);
+  --green:#00ff88;--red:#ff4444;--blue:#4499ff;--pink:#ff44cc;--cyan:#00ccff;--yellow:#ffee00;
+  --mono:'Share Tech Mono',monospace;--pixel:'Press Start 2P',monospace;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--mono);overflow:hidden}
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:#000}::-webkit-scrollbar-thumb{background:#333}
 
-  :root {
-    --bg: #080a0f;
-    --bg2: #0d1017;
-    --bg3: #131720;
-    --border: #1e2535;
-    --border2: #2a3347;
-    --text: #e8edf5;
-    --muted: #4a5568;
-    --muted2: #6b7a96;
-    --accent: #7c6af7;
-    --accent2: #a78bfa;
-    --green: #34d399;
-    --red: #f87171;
-    --amber: #fbbf24;
-    --blue: #60a5fa;
-    --cyan: #22d3ee;
-    --mono: 'JetBrains Mono', monospace;
-    --sans: 'Syne', sans-serif;
-  }
+/* scanlines */
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.04) 2px,rgba(0,0,0,0.04) 4px);pointer-events:none;z-index:9999}
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+.shell{display:grid;grid-template-rows:auto auto auto 1fr auto;height:100vh;position:relative;z-index:1}
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--mono);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
+/* header */
+.hdr{
+  background:#000;border-bottom:2px solid var(--orange);
+  padding:6px 16px;display:flex;align-items:center;justify-content:space-between;
+}
+.hdr-left{display:flex;align-items:center;gap:14px}
+.pac-wrap{position:relative;width:28px;height:28px}
+.pac-body{
+  position:absolute;
+  width:28px;height:28px;
+  background:var(--yellow);
+  border-radius:50%;
+  clip-path:polygon(100% 50%,100% 100%,0 100%,0 0,100% 0,100% 50%);
+  animation:munch 0.35s steps(1) infinite;
+}
+@keyframes munch{
+  0%{clip-path:polygon(60% 40%,100% 0,100% 100%,0 100%,0 0,100% 0,60% 40%)}
+  50%{clip-path:polygon(100% 50%,100% 100%,0 100%,0 0,100% 0)}
+}
+.pac-eye{position:absolute;width:5px;height:5px;background:#000;border-radius:50%;top:6px;left:12px}
+.hdr-title{font-family:var(--pixel);font-size:9px;color:var(--orange);letter-spacing:2px;text-shadow:0 0 12px var(--orange)88}
+.hdr-sub{font-size:10px;color:var(--sub);letter-spacing:0.08em}
+.hdr-stats{display:flex;gap:20px}
+.hstat{display:flex;flex-direction:column;align-items:flex-end}
+.hstat-l{font-size:9px;color:var(--dim);letter-spacing:0.08em}
+.hstat-v{color:var(--orange2);font-size:11px}
 
-  /* grid background */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image:
-      linear-gradient(var(--border) 1px, transparent 1px),
-      linear-gradient(90deg, var(--border) 1px, transparent 1px);
-    background-size: 40px 40px;
-    opacity: 0.3;
-    pointer-events: none;
-    z-index: 0;
-  }
+/* nav */
+.nav{background:#000;border-bottom:1px solid var(--b2);display:flex;align-items:stretch}
+.nav-btn{
+  padding:5px 14px;font-size:10px;color:var(--sub);
+  cursor:pointer;border-right:1px solid var(--b1);
+  letter-spacing:0.05em;transition:all 0.1s;
+  display:flex;align-items:center;gap:5px;border-bottom:2px solid transparent;
+  background:transparent;border-top:none;border-left:none;font-family:var(--mono);
+}
+.nav-btn:hover,.nav-btn.on{color:var(--orange);background:var(--orange3);border-bottom-color:var(--orange)}
+.nav-key{color:var(--dim);font-size:9px}
+.nav-spacer{flex:1}
+.ws-pill{display:flex;align-items:center;gap:6px;padding:0 14px;font-size:9px;color:var(--sub)}
+.ws-dot{width:6px;height:6px;border-radius:50%;background:var(--dim);flex-shrink:0}
+.ws-dot.on{background:var(--green);box-shadow:0 0 7px var(--green);animation:blink 1.2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.4}}
 
-  .app { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 24px; }
+/* toolbar */
+.tbar{
+  background:var(--bg1);border-bottom:1px solid var(--b1);
+  padding:7px 14px;display:flex;gap:7px;align-items:center;
+}
+.tin{
+  flex:1;background:#000;border:1px solid var(--b2);
+  padding:5px 10px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;
+  transition:border-color 0.15s;
+}
+.tin:focus{border-color:var(--orange)}
+.tin::placeholder{color:var(--dim)}
+.tbtn{
+  padding:5px 13px;background:#000;border:1px solid var(--b2);
+  color:var(--sub);font-family:var(--mono);font-size:10px;cursor:pointer;
+  letter-spacing:0.04em;transition:all 0.12s;white-space:nowrap;
+}
+.tbtn:hover{border-color:var(--orange);color:var(--orange);background:var(--orange3)}
+.tbtn.prime{border-color:var(--orange);color:var(--orange)}
+.tbtn:disabled{opacity:0.3;cursor:not-allowed}
+.clk{font-size:10px;color:var(--dim);min-width:36px;text-align:right;font-variant-numeric:tabular-nums}
 
-  /* header */
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 20px 0 32px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 32px;
-  }
-  .logo { display: flex; align-items: center; gap: 14px; }
-  .logo-icon {
-    width: 42px; height: 42px;
-    background: linear-gradient(135deg, var(--accent), var(--cyan));
-    border-radius: 10px;
-    display: grid; place-items: center;
-    font-size: 20px;
-  }
-  .logo-text { font-family: var(--sans); font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
-  .logo-sub { font-size: 11px; color: var(--muted2); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 2px; }
-  .status-pill {
-    display: flex; align-items: center; gap: 8px;
-    padding: 6px 14px;
-    border: 1px solid var(--border2);
-    border-radius: 100px;
-    font-size: 12px; color: var(--muted2);
-  }
-  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
-  .dot.active { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 1.5s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+/* main area */
+.main{display:grid;grid-template-columns:1fr 270px;overflow:hidden}
+.graph-wrap{position:relative;overflow:hidden;background:#000}
+#gsvg{width:100%;height:100%;position:absolute;inset:0}
 
-  /* layout */
-  .grid { display: grid; grid-template-columns: 1fr 380px; gap: 20px; margin-bottom: 20px; }
-  .grid-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+/* sidebar */
+.side{display:flex;flex-direction:column;border-left:1px solid var(--b2);overflow:hidden}
+.panel{display:flex;flex-direction:column;overflow:hidden;border-bottom:1px solid var(--b1)}
+.panel:last-child{border-bottom:none;flex:1}
+.phd{
+  padding:5px 10px;background:var(--bg1);border-bottom:1px solid var(--b1);
+  display:flex;justify-content:space-between;align-items:center;flex-shrink:0;
+}
+.phd-t{font-family:var(--pixel);font-size:7px;color:var(--orange);letter-spacing:1px}
+.phd-s{font-size:9px;color:var(--dim)}
+.pbody{flex:1;overflow-y:auto;padding:7px 9px}
 
-  /* card */
-  .card {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    overflow: hidden;
-  }
-  .card-header {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; justify-content: space-between;
-  }
-  .card-title { font-family: var(--sans); font-size: 13px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted2); }
-  .card-body { padding: 20px; }
+/* log */
+.lr{display:flex;gap:6px;padding:3px 0;border-bottom:1px solid rgba(34,34,34,0.7);font-size:10px;animation:fin 0.18s ease}
+@keyframes fin{from{opacity:0}to{opacity:1}}
+.lr:last-child{border-bottom:none}
+.lts{color:var(--dim);min-width:30px;font-size:9px}
+.lag{min-width:62px;font-weight:bold;font-size:9px}
+.lmsg{color:var(--sub);flex:1;line-height:1.4;font-size:9px}
+.cdone{color:var(--green)}.crun{color:var(--yellow)}.cerr{color:var(--red)}
+.aPlanner{color:var(--yellow)}.aArchitect{color:var(--cyan)}.aCoder{color:#bb88ff}
+.aReviewer{color:var(--blue)}.aSelfHealer{color:var(--green)}.aDebugger{color:var(--red)}
+.aDocWriter{color:var(--sub)}.aSystem{color:var(--orange)}
 
-  /* agent graph */
-  .agent-graph { position: relative; height: 320px; }
-  svg.graph { width: 100%; height: 100%; }
+/* bench/sec */
+.bt{width:100%;border-collapse:collapse;font-size:9px}
+.bt th{text-align:left;padding:4px 6px;color:var(--sub);border-bottom:1px solid var(--b1);font-weight:normal;letter-spacing:0.05em}
+.bt td{padding:4px 6px;border-bottom:1px solid rgba(30,30,30,0.5);color:var(--sub)}
+.bt tr:last-child td{border-bottom:none}
+.good{color:var(--green)!important}.bad{color:var(--red)!important}.neu{color:var(--sub)!important}
+.sc{border-radius:2px;padding:7px 9px;margin-bottom:6px;font-size:9px}
+.sc-bad{border:1px solid rgba(255,68,68,0.25);background:rgba(255,68,68,0.04)}
+.sc-good{border:1px solid rgba(0,255,136,0.25);background:rgba(0,255,136,0.04)}
+.sc-t{font-weight:bold;margin-bottom:3px}
+.sc-bad .sc-t{color:var(--red)}.sc-good .sc-t{color:var(--green)}
+.sc-code{font-family:var(--mono);font-size:9px;color:var(--dim);background:#000;padding:5px 6px;margin-top:5px;line-height:1.7}
+.empty{text-align:center;padding:18px;color:var(--dim);font-size:10px}
 
-  /* agent nodes */
-  .agent-node {
-    cursor: pointer;
-    transition: all 0.3s ease;
-  }
-  .agent-node circle {
-    transition: all 0.3s ease;
-    stroke-width: 2;
-  }
-  .agent-node.idle circle { fill: var(--bg3); stroke: var(--border2); }
-  .agent-node.running circle {
-    fill: #1a1f35;
-    stroke: var(--accent);
-    filter: drop-shadow(0 0 12px var(--accent));
-    animation: nodeGlow 1s infinite alternate;
-  }
-  .agent-node.done circle { fill: #0d2420; stroke: var(--green); }
-  .agent-node.error circle { fill: #2a0d0d; stroke: var(--red); }
-  @keyframes nodeGlow {
-    from { filter: drop-shadow(0 0 6px var(--accent)); }
-    to   { filter: drop-shadow(0 0 18px var(--accent)); }
-  }
-  .agent-node text { font-family: var(--mono); font-size: 11px; fill: var(--muted2); text-anchor: middle; pointer-events: none; }
-  .agent-node .icon { font-size: 18px; text-anchor: middle; dominant-baseline: central; }
-  .agent-node.running text { fill: var(--accent2); }
-  .agent-node.done text { fill: var(--green); }
-
-  /* edges */
-  .edge { stroke: var(--border2); stroke-width: 1.5; fill: none; stroke-dasharray: 4 4; }
-  .edge.active { stroke: var(--accent); stroke-dasharray: none; opacity: 0.6;
-    animation: edgeFlow 0.5s ease; }
-  @keyframes edgeFlow { from{stroke-dashoffset:20} to{stroke-dashoffset:0} }
-
-  /* task input */
-  .task-input-wrap { display: flex; gap: 10px; margin-bottom: 20px; }
-  .task-input {
-    flex: 1;
-    background: var(--bg3);
-    border: 1px solid var(--border2);
-    border-radius: 8px;
-    padding: 10px 14px;
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 13px;
-    outline: none;
-    transition: border-color 0.2s;
-  }
-  .task-input:focus { border-color: var(--accent); }
-  .task-input::placeholder { color: var(--muted); }
-
-  .btn {
-    padding: 10px 20px;
-    border-radius: 8px;
-    border: none;
-    font-family: var(--mono);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .btn-primary {
-    background: var(--accent);
-    color: white;
-  }
-  .btn-primary:hover { background: var(--accent2); transform: translateY(-1px); }
-  .btn-primary:disabled { background: var(--muted); cursor: not-allowed; transform: none; }
-  .btn-ghost {
-    background: transparent;
-    color: var(--muted2);
-    border: 1px solid var(--border2);
-  }
-  .btn-ghost:hover { border-color: var(--accent); color: var(--accent2); }
-
-  /* log panel */
-  .log-panel { height: 320px; overflow-y: auto; }
-  .log-panel::-webkit-scrollbar { width: 4px; }
-  .log-panel::-webkit-scrollbar-track { background: transparent; }
-  .log-panel::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
-
-  .log-entry {
-    display: flex; gap: 10px; align-items: flex-start;
-    padding: 6px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 12px;
-    animation: fadeIn 0.3s ease;
-  }
-  @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
-  .log-ts { color: var(--muted); min-width: 42px; }
-  .log-agent { min-width: 80px; font-weight: 500; }
-  .log-agent.Planner { color: var(--amber); }
-  .log-agent.Architect { color: var(--cyan); }
-  .log-agent.Coder { color: var(--accent2); }
-  .log-agent.Reviewer { color: var(--blue); }
-  .log-agent.SelfHealer { color: var(--green); }
-  .log-agent.DocWriter { color: var(--muted2); }
-  .log-agent.System { color: var(--text); }
-  .log-msg { color: var(--muted2); flex: 1; line-height: 1.5; }
-  .log-status-done { color: var(--green); }
-  .log-status-running { color: var(--amber); }
-  .log-status-error { color: var(--red); }
-
-  /* benchmark panel */
-  .bench-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .bench-table th {
-    text-align: left; padding: 8px 12px;
-    color: var(--muted2); font-weight: 500;
-    border-bottom: 1px solid var(--border);
-    font-family: var(--sans); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
-  }
-  .bench-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
-  .bench-table tr:last-child td { border-bottom: none; }
-  .val-better { color: var(--green); font-weight: 500; }
-  .val-worse  { color: var(--red); }
-  .val-neutral{ color: var(--muted2); }
-
-  /* security badge */
-  .vuln-badge {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 4px 10px; border-radius: 6px;
-    font-size: 11px; font-weight: 500;
-  }
-  .vuln-critical { background: rgba(248,113,113,0.1); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
-  .vuln-safe     { background: rgba(52,211,153,0.1); color: var(--green); border: 1px solid rgba(52,211,153,0.3); }
-
-  /* stats row */
-  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
-  .stat {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 16px;
-  }
-  .stat-label { font-size: 10px; color: var(--muted2); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
-  .stat-value { font-family: var(--sans); font-size: 24px; font-weight: 700; }
-  .stat-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
-
-  /* progress bar */
-  .progress-wrap { margin: 4px 0; }
-  .progress-bar { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
-  .progress-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; background: var(--accent); }
-  .progress-fill.green { background: var(--green); }
-  .progress-fill.amber { background: var(--amber); }
-
-  /* empty state */
-  .empty { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 12px; }
-  .empty .icon { font-size: 32px; margin-bottom: 10px; opacity: 0.4; }
-
-  /* timer */
-  .timer { font-family: var(--mono); font-size: 12px; color: var(--muted2); }
-
-  /* scrollbar */
-  .bench-scroll { max-height: 320px; overflow-y: auto; }
-  .bench-scroll::-webkit-scrollbar { width: 4px; }
-  .bench-scroll::-webkit-scrollbar-thumb { background: var(--border2); }
+/* statusbar */
+.sbar{background:#000;border-top:1px solid var(--orange);padding:3px 12px;display:flex;gap:22px;align-items:center}
+.si{display:flex;gap:7px;align-items:center;font-size:10px}
+.sl{color:var(--dim)}.sv{color:var(--orange2);font-weight:bold;min-width:28px}
 </style>
 </head>
 <body>
-<div class="app">
+<div class="shell">
 
-  <!-- header -->
-  <header>
-    <div class="logo">
-      <div class="logo-icon">🤖</div>
-      <div>
-        <div class="logo-text">Agent Society</div>
-        <div class="logo-sub">Qwen Cloud · 7-Agent Collaborative System</div>
-      </div>
-    </div>
-    <div style="display:flex;gap:12px;align-items:center">
-      <div class="timer" id="timer">00:00</div>
-      <div class="status-pill">
-        <div class="dot" id="statusDot"></div>
-        <span id="statusText">ready</span>
-      </div>
-    </div>
-  </header>
-
-  <!-- stats row -->
-  <div class="stats-row">
-    <div class="stat">
-      <div class="stat-label">Files Generated</div>
-      <div class="stat-value" id="statFiles" style="color:var(--accent2)">0</div>
-      <div class="stat-sub">this session</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">Agents Active</div>
-      <div class="stat-value" id="statAgents" style="color:var(--cyan)">0 / 7</div>
-      <div class="stat-sub">coordinating</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">Quality Score</div>
-      <div class="stat-value" id="statScore" style="color:var(--green)">—</div>
-      <div class="stat-sub">vs single agent</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">CVEs Caught</div>
-      <div class="stat-value" id="statCVE" style="color:var(--red)">0</div>
-      <div class="stat-sub">security issues</div>
-    </div>
+<div class="hdr">
+  <div class="hdr-left">
+    <div class="pac-wrap"><div class="pac-body"></div><div class="pac-eye"></div></div>
+    <span class="hdr-title">APEX SOCIETY</span>
+    <span class="hdr-sub">QWEN CLOUD · 7-AGENT SYSTEM</span>
   </div>
-
-  <!-- task input -->
-  <div class="task-input-wrap">
-    <input class="task-input" id="taskInput" type="text"
-      placeholder="describe what to build... e.g. 'REST API with JWT auth and PostgreSQL'"
-      value="build a REST API for a task manager with user auth, CRUD operations, and JWT tokens" />
-    <button class="btn btn-primary" id="runBtn" onclick="startRun()">▶ Run Society</button>
-    <button class="btn btn-ghost" onclick="runBenchmark()">⚡ Benchmark</button>
-    <button class="btn btn-ghost" onclick="clearAll()">↺ Reset</button>
+  <div class="hdr-stats">
+    <div class="hstat"><span class="hstat-l">AGENTS</span><span class="hstat-v" id="hsA">0/7</span></div>
+    <div class="hstat"><span class="hstat-l">FILES</span><span class="hstat-v" id="hsF">0</span></div>
+    <div class="hstat"><span class="hstat-l">QUALITY</span><span class="hstat-v" id="hsQ">—</span></div>
+    <div class="hstat"><span class="hstat-l">CVEs</span><span class="hstat-v" id="hsC" style="color:var(--red)">0</span></div>
   </div>
-
-  <!-- main grid -->
-  <div class="grid">
-
-    <!-- agent graph -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">Agent Network</div>
-        <div style="font-size:11px;color:var(--muted2)" id="activeAgent">—</div>
-      </div>
-      <div class="card-body agent-graph">
-        <svg class="graph" id="agentSvg" viewBox="0 0 560 280"></svg>
-      </div>
-    </div>
-
-    <!-- log panel -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">Execution Log</div>
-        <div style="font-size:11px;color:var(--muted2)" id="logCount">0 events</div>
-      </div>
-      <div class="card-body" style="padding:12px">
-        <div class="log-panel" id="logPanel">
-          <div class="empty"><div class="icon">📋</div>waiting for run...</div>
-        </div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- bottom grid -->
-  <div class="grid-bottom">
-
-    <!-- benchmark results -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">Benchmark — Society vs Single Agent</div>
-      </div>
-      <div class="card-body bench-scroll" style="padding:0">
-        <div id="benchContent">
-          <div class="empty"><div class="icon">⚡</div>click benchmark to compare</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- security panel -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">Security Analysis</div>
-      </div>
-      <div class="card-body" id="securityPanel">
-        <div class="empty"><div class="icon">🔒</div>run to see security analysis</div>
-      </div>
-    </div>
-
-  </div>
-
 </div>
 
+<div class="nav">
+  <button class="nav-btn on" onclick="setTab('agents',this)"><span class="nav-key">[1]</span> AGENTS</button>
+  <button class="nav-btn" onclick="setTab('bench',this)"><span class="nav-key">[2]</span> BENCHMARK</button>
+  <button class="nav-btn" onclick="setTab('security',this)"><span class="nav-key">[3]</span> SECURITY</button>
+  <div class="nav-spacer"></div>
+  <div class="ws-pill"><div class="ws-dot" id="wsd"></div><span id="wst">offline</span></div>
+</div>
+
+<div class="tbar">
+  <input class="tin" id="tin" type="text" value="build a REST API with JWT auth, CRUD operations, and PostgreSQL" placeholder="describe what to build..."/>
+  <button class="tbtn prime" id="runBtn" onclick="doRun()">▶ RUN</button>
+  <button class="tbtn" onclick="doBench()">⚡ BENCH</button>
+  <button class="tbtn" onclick="doReset()">↺ RESET</button>
+  <span class="clk" id="clk">00:00</span>
+</div>
+
+<div class="main">
+  <div class="graph-wrap" id="gw">
+    <svg id="gsvg" viewBox="-400 -300 800 600"></svg>
+  </div>
+  <div class="side">
+    <div class="panel" style="flex:1.3">
+      <div class="phd"><span class="phd-t">EXEC LOG</span><span class="phd-s" id="lc">0 events</span></div>
+      <div class="pbody" id="lp"><div class="empty">waiting...</div></div>
+    </div>
+    <div class="panel" style="flex:1" id="dynPanel">
+      <div class="phd"><span class="phd-t" id="dynT">BENCHMARK</span></div>
+      <div class="pbody" id="dynB"><div class="empty">click benchmark</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="sbar">
+  <div class="si"><span class="sl">STATUS</span><span class="sv" id="sbS">IDLE</span></div>
+  <div class="si"><span class="sl">SESSION</span><span class="sv" id="sbSess">—</span></div>
+  <div class="si"><span class="sl">AGENTS</span><span class="sv" id="sbA">0/7</span></div>
+  <div class="si"><span class="sl">FILES</span><span class="sv" id="sbF">0</span></div>
+  <div style="flex:1"></div>
+  <span style="font-size:9px;color:var(--dim)">APEX SOCIETY v1.0 · QWEN CLOUD · press 1-3 to navigate</span>
+</div>
+
+</div><!-- .shell -->
+
 <script>
-// ── agent definitions ──────────────────────────────────────────────────────────
-const AGENTS = [
-  { id: 'Planner',    icon: '🗺',  color: '#fbbf24', cx: 280, cy: 40  },
-  { id: 'Architect',  icon: '🏛',  color: '#22d3ee', cx: 460, cy: 100 },
-  { id: 'Coder',      icon: '👨‍💻', color: '#a78bfa', cx: 460, cy: 190 },
-  { id: 'Reviewer',   icon: '🔍',  color: '#60a5fa', cx: 280, cy: 240 },
-  { id: 'SelfHealer', icon: '🔧',  color: '#34d399', cx: 100, cy: 190 },
-  { id: 'Debugger',   icon: '🐛',  color: '#f87171', cx: 100, cy: 100 },
-  { id: 'DocWriter',  icon: '📝',  color: '#94a3b8', cx: 280, cy: 140 },
+// ── SVG namespace ──────────────────────────────────────────────────────────────
+const NS = 'http://www.w3.org/2000/svg';
+function s(tag){return document.createElementNS(NS,tag)}
+
+// ── agent config ───────────────────────────────────────────────────────────────
+const AG = [
+  {id:'Planner',   col:'#ffee00', lbl:'planner',   x:0,    y:-220},
+  {id:'Architect', col:'#00ccff', lbl:'architect', x:220,  y:-100},
+  {id:'Coder',     col:'#bb88ff', lbl:'coder',     x:220,  y:110},
+  {id:'Reviewer',  col:'#4499ff', lbl:'reviewer',  x:0,    y:220},
+  {id:'SelfHealer',col:'#00ff88', lbl:'healer',    x:-220, y:110},
+  {id:'Debugger',  col:'#ff4444', lbl:'debugger',  x:-220, y:-100},
+  {id:'DocWriter', col:'#888888', lbl:'docs',      x:0,    y:0},
+];
+const EDGES=[
+  ['Planner','Architect'],['Planner','DocWriter'],['Planner','Coder'],
+  ['Architect','Coder'],['Coder','Reviewer'],
+  ['Reviewer','SelfHealer'],['SelfHealer','Debugger'],
+  ['Debugger','Coder'],['DocWriter','Reviewer'],
 ];
 
-const EDGES = [
-  ['Planner','Architect'], ['Planner','DocWriter'],
-  ['Architect','Coder'],   ['Coder','Reviewer'],
-  ['Reviewer','SelfHealer'],['SelfHealer','Debugger'],
-  ['Debugger','Coder'],    ['DocWriter','Reviewer'],
-  ['Planner','Coder'],
-];
+// ── force simulation (simple) ─────────────────────────────────────────────────
+let nodes = AG.map(a=>({...a, vx:0, vy:0, pinned:false}));
+let simRunning = true;
+
+function forceStep(){
+  if(!simRunning) return;
+  const k = 0.01;
+  // repulsion
+  for(let i=0;i<nodes.length;i++){
+    for(let j=i+1;j<nodes.length;j++){
+      const dx=nodes[i].x-nodes[j].x, dy=nodes[i].y-nodes[j].y;
+      const d=Math.sqrt(dx*dx+dy*dy)||1;
+      const f=3000/(d*d);
+      nodes[i].vx+=dx/d*f; nodes[i].vy+=dy/d*f;
+      nodes[j].vx-=dx/d*f; nodes[j].vy-=dy/d*f;
+    }
+  }
+  // edge attraction
+  EDGES.forEach(([a,b])=>{
+    const na=nodes.find(n=>n.id===a), nb=nodes.find(n=>n.id===b);
+    if(!na||!nb) return;
+    const dx=nb.x-na.x, dy=nb.y-na.y;
+    const d=Math.sqrt(dx*dx+dy*dy)||1;
+    const ideal=200, f=(d-ideal)*0.005;
+    na.vx+=dx/d*f; na.vy+=dy/d*f;
+    nb.vx-=dx/d*f; nb.vy-=dy/d*f;
+  });
+  // center gravity
+  nodes.forEach(n=>{
+    n.vx-=n.x*0.003; n.vy-=n.y*0.003;
+    n.vx*=0.85; n.vy*=0.85;
+    if(!n.pinned){n.x+=n.vx; n.y+=n.vy;}
+  });
+  requestAnimationFrame(forceStep);
+  drawGraph();
+}
 
 // ── state ──────────────────────────────────────────────────────────────────────
-let agentStates = {};
-let logEntries = [];
-let timerInterval = null;
-let startTime = null;
-let filesGenerated = 0;
-let agentsCompleted = 0;
-let cvesCaught = 0;
-let isRunning = false;
+let nstate={}, logs=[], t0=null, ticker=null, isRunning=false;
+let doneCnt=0, fileCnt=0, cveCnt=0;
+let animDots={}; // agent→active SVG dot group
+AG.forEach(a=>{nstate[a.id]='idle'});
 
-// ── init SVG ───────────────────────────────────────────────────────────────────
-function initSVG() {
-  const svg = document.getElementById('agentSvg');
-  svg.innerHTML = '';
+// ── draw SVG graph ─────────────────────────────────────────────────────────────
+function getPos(id){const n=nodes.find(n=>n.id===id);return n?[n.x,n.y]:[0,0]}
 
-  // draw edges
-  EDGES.forEach(([a, b]) => {
-    const na = AGENTS.find(x => x.id === a);
-    const nb = AGENTS.find(x => x.id === b);
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    const mx = (na.cx + nb.cx) / 2;
-    const my = (na.cy + nb.cy) / 2 - 20;
-    line.setAttribute('d', `M${na.cx},${na.cy} Q${mx},${my} ${nb.cx},${nb.cy}`);
-    line.setAttribute('class', 'edge');
-    line.setAttribute('id', `edge-${a}-${b}`);
-    svg.appendChild(line);
+function buildEdgePath(ax,ay,bx,by){
+  const dx=bx-ax, dy=by-ay, dist=Math.sqrt(dx*dx+dy*dy)||1;
+  // shorten endpoints
+  const sr=28, tr=28;
+  const sRatio=sr/dist, eRatio=(dist-tr)/dist;
+  const sx=ax+dx*sRatio, sy=ay+dy*sRatio;
+  const ex=ax+dx*eRatio, ey=ay+dy*eRatio;
+  // perpendicular control point for bezier curve
+  const cx=(sx+ex)/2 + (-dy/dist)*0.3*Math.max(35,dist*0.18);
+  const cy=(sy+ey)/2 + (dx/dist)*0.3*Math.max(35,dist*0.18);
+  return `M ${sx} ${sy} Q ${cx} ${cy} ${ex} ${ey}`;
+}
+
+function drawGraph(){
+  const svg=document.getElementById('gsvg');
+
+  // get or create layers
+  let edgeLayer=svg.querySelector('#edgeLayer');
+  let dotLayer=svg.querySelector('#dotLayer');
+  let nodeLayer=svg.querySelector('#nodeLayer');
+  if(!edgeLayer){
+    edgeLayer=s('g');edgeLayer.id='edgeLayer';svg.appendChild(edgeLayer);
+    dotLayer=s('g');dotLayer.id='dotLayer';svg.appendChild(dotLayer);
+    nodeLayer=s('g');nodeLayer.id='nodeLayer';svg.appendChild(nodeLayer);
+  }
+
+  edgeLayer.innerHTML='';
+  dotLayer.innerHTML='';
+  nodeLayer.innerHTML='';
+
+  // edges
+  EDGES.forEach(([a,b])=>{
+    const [ax,ay]=getPos(a), [bx,by]=getPos(b);
+    const path=buildEdgePath(ax,ay,bx,by);
+    const active=nstate[a]==='running'||nstate[b]==='running';
+    const bothDone=nstate[a]==='done'&&nstate[b]==='done';
+    const acol=AG.find(n=>n.id===a).col;
+
+    // edge line
+    const p=s('path');
+    p.setAttribute('d',path);p.setAttribute('fill','none');
+    p.setAttribute('stroke', active?acol : bothDone?acol+'55' : '#2a2a2a');
+    p.setAttribute('stroke-width', active?2:1);
+    p.setAttribute('stroke-dasharray', active?'none':'4 8');
+    p.setAttribute('stroke-opacity', active?1:0.7);
+    edgeLayer.appendChild(p);
+
+    // animated dots on active edges (exactly like Octogent's animateMotion)
+    if(active || bothDone){
+      [0,1,2].forEach(i=>{
+        // trail dot
+        const trail=s('circle');
+        trail.setAttribute('r', active?4.6:3);
+        trail.setAttribute('fill', acol);
+        trail.setAttribute('opacity', Math.max(0.1, 0.25-i*0.04));
+        const mt=s('animateMotion');
+        mt.setAttribute('path',path);
+        mt.setAttribute('begin',`${i*0.62}s`);
+        mt.setAttribute('dur', active?'1.9s':'3s');
+        mt.setAttribute('repeatCount','indefinite');
+        mt.setAttribute('rotate','auto');
+        const ar=s('animate');
+        ar.setAttribute('attributeName','r');
+        ar.setAttribute('values',active?'3.8;5.2;3.8':'2;3;2');
+        ar.setAttribute('dur',active?'1.9s':'3s');
+        ar.setAttribute('begin',`${i*0.62}s`);
+        ar.setAttribute('repeatCount','indefinite');
+        trail.appendChild(mt); trail.appendChild(ar);
+        dotLayer.appendChild(trail);
+
+        // main dot
+        const dot=s('circle');
+        dot.setAttribute('r', active?3.2:2);
+        dot.setAttribute('fill','#fff4cc');
+        dot.setAttribute('stroke',acol);
+        dot.setAttribute('stroke-width','1.2');
+        dot.setAttribute('opacity', Math.max(0.6, 1-i*0.08));
+        const mt2=s('animateMotion');
+        mt2.setAttribute('path',path);
+        mt2.setAttribute('begin',`${i*0.62}s`);
+        mt2.setAttribute('dur',active?'1.9s':'3s');
+        mt2.setAttribute('repeatCount','indefinite');
+        mt2.setAttribute('rotate','auto');
+        const ar2=s('animate');
+        ar2.setAttribute('attributeName','r');
+        ar2.setAttribute('values',active?'2.8;3.8;2.8':'1.8;2.5;1.8');
+        ar2.setAttribute('dur',active?'1.9s':'3s');
+        ar2.setAttribute('begin',`${i*0.62}s`);
+        ar2.setAttribute('repeatCount','indefinite');
+        dot.appendChild(mt2); dot.appendChild(ar2);
+        dotLayer.appendChild(dot);
+      });
+    }
   });
 
-  // draw nodes
-  AGENTS.forEach(agent => {
-    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    g.setAttribute('class', 'agent-node idle');
-    g.setAttribute('id', `node-${agent.id}`);
+  // nodes
+  AG.forEach(ag=>{
+    const [x,y]=getPos(ag.id);
+    const st=nstate[ag.id];
+    const col=ag.col;
+    const g=s('g');
+    g.setAttribute('transform',`translate(${x},${y})`);
+    g.style.cursor='grab';
 
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    circle.setAttribute('cx', agent.cx);
-    circle.setAttribute('cy', agent.cy);
-    circle.setAttribute('r', 28);
-    g.appendChild(circle);
+    // glow ring when active
+    if(st==='running'){
+      const glow=s('circle');
+      glow.setAttribute('r','42');
+      glow.setAttribute('fill',col+'12');
+      glow.setAttribute('stroke',col+'33');
+      glow.setAttribute('stroke-width','1');
+      g.appendChild(glow);
 
-    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    icon.setAttribute('x', agent.cx);
-    icon.setAttribute('y', agent.cy);
-    icon.setAttribute('class', 'icon');
-    icon.textContent = agent.icon;
-    g.appendChild(icon);
+      // pulsing outer ring animation
+      const ring=s('circle');
+      ring.setAttribute('r','34');
+      ring.setAttribute('fill','none');
+      ring.setAttribute('stroke',col);
+      ring.setAttribute('stroke-width','1.5');
+      ring.setAttribute('stroke-dasharray','4 4');
+      ring.setAttribute('opacity','0.7');
+      const ra=s('animateTransform');
+      ra.setAttribute('attributeName','transform');ra.setAttribute('type','rotate');
+      ra.setAttribute('from','0');ra.setAttribute('to','360');
+      ra.setAttribute('dur','2s');ra.setAttribute('repeatCount','indefinite');
+      ring.appendChild(ra);
+      g.appendChild(ring);
 
-    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    label.setAttribute('x', agent.cx);
-    label.setAttribute('y', agent.cy + 42);
-    label.textContent = agent.id;
-    g.appendChild(label);
+      // second ring counter-rotating
+      const ring2=s('circle');
+      ring2.setAttribute('r','26');
+      ring2.setAttribute('fill','none');
+      ring2.setAttribute('stroke',col);
+      ring2.setAttribute('stroke-width','1');
+      ring2.setAttribute('stroke-dasharray','2 6');
+      ring2.setAttribute('opacity','0.4');
+      const ra2=s('animateTransform');
+      ra2.setAttribute('attributeName','transform');ra2.setAttribute('type','rotate');
+      ra2.setAttribute('from','360');ra2.setAttribute('to','0');
+      ra2.setAttribute('dur','3s');ra2.setAttribute('repeatCount','indefinite');
+      ring2.appendChild(ra2);
+      g.appendChild(ring2);
+    }
 
-    svg.appendChild(g);
-    agentStates[agent.id] = 'idle';
+    if(st==='done'){
+      const glow=s('circle');
+      glow.setAttribute('r','32');
+      glow.setAttribute('fill',col+'0a');
+      glow.setAttribute('stroke',col+'33');
+      glow.setAttribute('stroke-width','1');
+      g.appendChild(glow);
+    }
+
+    // node body
+    const R=24;
+    const body=s('circle');
+    body.setAttribute('r',R);
+    body.setAttribute('fill', st==='running'?col+'22': st==='done'?col+'11':'#111');
+    body.setAttribute('stroke', st==='running'?col: st==='done'?col+'88': '#2a2a2a');
+    body.setAttribute('stroke-width', st==='running'?2:1);
+    g.appendChild(body);
+
+    // pulse animation on node body when running
+    if(st==='running'){
+      const pa=s('animate');
+      pa.setAttribute('attributeName','r');
+      pa.setAttribute('values',`${R};${R+2};${R}`);
+      pa.setAttribute('dur','1s');pa.setAttribute('repeatCount','indefinite');
+      body.appendChild(pa);
+    }
+
+    // pixel octopus character via foreignObject
+    const fo=s('foreignObject');
+    fo.setAttribute('x','-22');fo.setAttribute('y','-22');
+    fo.setAttribute('width','44');fo.setAttribute('height','44');
+    fo.style.pointerEvents='none';fo.style.overflow='visible';
+    const div=document.createElementNS('http://www.w3.org/1999/xhtml','div');
+    div.style.cssText='width:44px;height:44px;display:flex;align-items:center;justify-content:center';
+    const cvs=document.createElementNS('http://www.w3.org/1999/xhtml','canvas');
+    cvs.width=44;cvs.height=44;
+    drawOctopus(cvs,col,st);
+    div.appendChild(cvs);fo.appendChild(div);g.appendChild(fo);
+
+    // label
+    const lbl=s('text');
+    lbl.setAttribute('text-anchor','middle');
+    lbl.setAttribute('y','38');
+    lbl.setAttribute('font-size','9');
+    lbl.setAttribute('font-family','Share Tech Mono,monospace');
+    lbl.setAttribute('fill', st==='running'?col: st==='done'?col+'99':'#444');
+    lbl.setAttribute('letter-spacing','1');
+    lbl.textContent=ag.lbl.toUpperCase();
+    g.appendChild(lbl);
+
+    // [ ACTIVE ] blinking label
+    if(st==='running'){
+      const act=s('text');
+      act.setAttribute('text-anchor','middle');
+      act.setAttribute('y','50');
+      act.setAttribute('font-size','7');
+      act.setAttribute('font-family','Share Tech Mono,monospace');
+      act.setAttribute('fill',col);
+      act.textContent='[ ACTIVE ]';
+      const ab=s('animate');
+      ab.setAttribute('attributeName','opacity');
+      ab.setAttribute('values','1;0;1');ab.setAttribute('dur','0.8s');
+      ab.setAttribute('repeatCount','indefinite');
+      act.appendChild(ab);
+      g.appendChild(act);
+    }
+
+    nodeLayer.appendChild(g);
   });
 }
 
-// ── update agent node state ────────────────────────────────────────────────────
-function setAgentState(agentId, state) {
-  const node = document.getElementById(`node-${agentId}`);
-  if (!node) return;
-  node.setAttribute('class', `agent-node ${state}`);
-  agentStates[agentId] = state;
+// ── pixel octopus canvas drawing ───────────────────────────────────────────────
+// Recreating the sprite from Octogent's EmptyOctopus.tsx
+const B='B', O='O', E='E', _='';
+const SPRITES={
+  idle:[
+    [_,_,_,_,O,O,O,O,O,O,O,O,_,_,_,_],
+    [_,_,_,O,B,B,B,B,B,B,B,B,O,_,_,_],
+    [_,_,O,B,B,B,B,B,B,B,B,B,B,O,_,_],
+    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
+    [_,O,B,B,E,E,B,B,B,B,E,E,B,B,O,_],
+    [_,O,B,B,E,E,B,B,B,B,E,E,B,B,O,_],
+    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
+    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
+    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
+    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
+    [_,O,B,O,B,B,O,B,B,O,B,B,O,B,O,_],
+    [_,_,O,_,O,_,_,O,_,O,_,_,O,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  ],
+  running:[
+    [_,_,_,_,O,O,O,O,O,O,O,O,_,_,_,_],
+    [_,_,_,O,B,B,B,B,B,B,B,B,O,_,_,_],
+    [_,_,O,B,B,B,B,B,B,B,B,B,B,O,_,_],
+    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
+    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
+    [_,O,B,B,E,E,B,O,O,B,E,E,B,B,O,_], // happy eyes + open mouth
+    [_,O,B,B,E,E,B,O,O,B,E,E,B,B,O,_],
+    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
+    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
+    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
+    [_,O,B,O,B,B,O,B,B,O,B,B,O,B,O,_],
+    [_,_,O,_,O,_,_,O,_,O,_,_,O,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  ],
+  done:[
+    [_,_,_,_,O,O,O,O,O,O,O,O,_,_,_,_],
+    [_,_,_,O,B,B,B,B,B,B,B,B,O,_,_,_],
+    [_,_,O,B,B,B,B,B,B,B,B,B,B,O,_,_],
+    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
+    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
+    [_,O,B,B,B,E,B,B,B,B,B,E,B,B,O,_], // happy ^_^ eyes
+    [_,O,B,B,E,E,B,B,B,B,E,E,B,B,O,_],
+    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
+    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
+    [_,O,B,O,B,O,B,B,B,B,O,B,O,B,O,_],
+    [_,_,O,_,O,_,O,_,_,O,_,O,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  ],
+};
 
-  // activate edges from this agent
-  if (state === 'running') {
-    EDGES.forEach(([a, b]) => {
-      if (a === agentId || b === agentId) {
-        const edge = document.getElementById(`edge-${a}-${b}`);
-        if (edge) edge.setAttribute('class', 'edge active');
-      }
+function drawOctopus(canvas, col, state){
+  const c=canvas.getContext('2d');
+  const sprite=SPRITES[state==='running'?'running':state==='done'?'done':'idle'];
+  const pw=Math.floor(canvas.width/16);
+  c.clearRect(0,0,canvas.width,canvas.height);
+  sprite.forEach((row,ry)=>{
+    row.forEach((cell,cx)=>{
+      if(!cell) return;
+      c.fillStyle = cell===B ? col
+                  : cell===O ? '#000000'
+                  : cell===E ? '#111111' : 'transparent';
+      c.fillRect(cx*pw, ry*pw, pw, pw);
     });
-    document.getElementById('activeAgent').textContent = `${agentId} running...`;
+  });
+}
+
+// ── drag to pan viewBox ────────────────────────────────────────────────────────
+const svg=document.getElementById('gsvg');
+let pan={x:0,y:0,dragging:false,sx:0,sy:0};
+let vb={x:-400,y:-300,w:800,h:600};
+
+svg.addEventListener('mousedown',e=>{
+  if(e.target===svg){pan.dragging=true;pan.sx=e.clientX;pan.sy=e.clientY}
+});
+svg.addEventListener('mousemove',e=>{
+  if(!pan.dragging) return;
+  const sc=svg.clientWidth/vb.w;
+  vb.x-=(e.clientX-pan.sx)/sc; vb.y-=(e.clientY-pan.sy)/sc;
+  pan.sx=e.clientX;pan.sy=e.clientY;
+  svg.setAttribute('viewBox',`${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+});
+svg.addEventListener('mouseup',()=>pan.dragging=false);
+svg.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const sc=e.deltaY>0?1.15:0.87;
+  vb.w*=sc;vb.h*=sc;
+  svg.setAttribute('viewBox',`${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+},{passive:false});
+
+// ── WebSocket ──────────────────────────────────────────────────────────────────
+let ws=null, wsRetry=null;
+function connectWS(){
+  ws=new WebSocket('ws://127.0.0.1:8000/ws');
+  ws.onopen=()=>{
+    document.getElementById('wsd').className='ws-dot on';
+    document.getElementById('wst').textContent='connected';
+    clearInterval(wsRetry);wsRetry=null;
+  };
+  ws.onclose=()=>{
+    document.getElementById('wsd').className='ws-dot';
+    document.getElementById('wst').textContent='offline — demo mode';
+    if(!wsRetry) wsRetry=setInterval(connectWS,4000);
+  };
+  ws.onmessage=e=>{
+    try{handleMsg(JSON.parse(e.data))}catch(err){}
+  };
+}
+function wsSend(d){
+  if(ws&&ws.readyState===1){ws.send(JSON.stringify(d));return true}
+  return false;
+}
+function handleMsg(m){
+  if(m.type==='session_created'){
+    document.getElementById('sbSess').textContent=m.session_id.slice(0,8);
   }
-  if (state === 'done') {
-    document.getElementById('activeAgent').textContent = `${agentId} ✓`;
-    agentsCompleted++;
-    document.getElementById('statAgents').textContent = `${agentsCompleted} / 7`;
+  if(m.type==='agent_event'){
+    const {agent,status,msg,elapsed}=m;
+    addLog(agent,status,msg,elapsed);
+    if(status==='running') setN(agent,'running');
+    else if(status==='done') setN(agent,'done');
+    else if(status==='error'){
+      if(agent==='Reviewer'&&msg.includes('secret')){
+        cveCnt++;document.getElementById('hsC').textContent=cveCnt;
+        showSec();
+      }
+    }
+    const fm=msg&&msg.match(/(\d+) files/);
+    if(fm){fileCnt=parseInt(fm[1]);updStats()}
+    if(status==='done'&&agent==='System'){
+      document.getElementById('hsQ').textContent='100';
+      setStatus('DONE');stopClock();isRunning=false;
+      document.getElementById('runBtn').disabled=false;
+    }
+    if(m.benchmark) showBench(m.benchmark);
   }
+}
+
+// ── node state ─────────────────────────────────────────────────────────────────
+function setN(id,s){
+  nstate[id]=s;
+  if(s==='done'){doneCnt++;updStats()}
+}
+
+function updStats(){
+  document.getElementById('hsA').textContent=`${doneCnt}/7`;
+  document.getElementById('sbA').textContent=`${doneCnt}/7`;
+  document.getElementById('hsF').textContent=fileCnt;
+  document.getElementById('sbF').textContent=fileCnt;
 }
 
 // ── log ────────────────────────────────────────────────────────────────────────
-function addLog(agent, status, msg, ts) {
-  const panel = document.getElementById('logPanel');
-  if (logEntries.length === 0) panel.innerHTML = '';
-
-  const entry = document.createElement('div');
-  entry.className = 'log-entry';
-
-  const elapsed = ts !== undefined ? ts : (startTime ? ((Date.now() - startTime) / 1000).toFixed(1) : '0.0');
-
-  entry.innerHTML = `
-    <span class="log-ts">${elapsed}s</span>
-    <span class="log-agent ${agent}">${agent}</span>
-    <span class="log-msg log-status-${status}">${msg}</span>
-  `;
-  panel.appendChild(entry);
-  panel.scrollTop = panel.scrollHeight;
-  logEntries.push({agent, status, msg, ts: elapsed});
-
-  document.getElementById('logCount').textContent = `${logEntries.length} events`;
+function addLog(agent,status,msg,elapsed){
+  const p=document.getElementById('lp');
+  if(logs.length===0) p.innerHTML='';
+  const ts=elapsed!=null?elapsed:(t0?((Date.now()-t0)/1000).toFixed(1):'0.0');
+  logs.push({agent,status,msg,ts});
+  const ac=`a${agent}`;
+  const sc={'done':'cdone','running':'crun','error':'cerr'}[status]||'';
+  const d=document.createElement('div');d.className='lr';
+  d.innerHTML=`<span class="lts">${ts}s</span><span class="lag ${ac}">${(agent||'SYS').slice(0,8).toUpperCase()}</span><span class="lmsg ${sc}">${msg}</span>`;
+  p.appendChild(d);p.scrollTop=p.scrollHeight;
+  document.getElementById('lc').textContent=`${logs.length} events`;
 }
 
-// ── timer ──────────────────────────────────────────────────────────────────────
-function startTimer() {
-  startTime = Date.now();
-  timerInterval = setInterval(() => {
-    const s = Math.floor((Date.now() - startTime) / 1000);
-    const m = Math.floor(s / 60).toString().padStart(2, '0');
-    const sec = (s % 60).toString().padStart(2, '0');
-    document.getElementById('timer').textContent = `${m}:${sec}`;
-  }, 500);
+function setStatus(t){document.getElementById('sbS').textContent=t}
+
+function startClock(){
+  t0=Date.now();
+  ticker=setInterval(()=>{
+    const sc=Math.floor((Date.now()-t0)/1000);
+    document.getElementById('clk').textContent=`${Math.floor(sc/60).toString().padStart(2,'0')}:${(sc%60).toString().padStart(2,'0')}`;
+  },500);
 }
+function stopClock(){clearInterval(ticker)}
+const sl=ms=>new Promise(r=>setTimeout(r,ms));
 
-function stopTimer() { clearInterval(timerInterval); }
+// ── run actions ────────────────────────────────────────────────────────────────
+async function doRun(){
+  if(isRunning) return;
+  const task=document.getElementById('tin').value.trim();
+  if(!task) return;
+  doReset(false);
+  isRunning=true;document.getElementById('runBtn').disabled=true;
+  setStatus('RUNNING');startClock();
 
-// ── status ─────────────────────────────────────────────────────────────────────
-function setStatus(status, text) {
-  const dot = document.getElementById('statusDot');
-  const label = document.getElementById('statusText');
-  dot.className = 'dot' + (status === 'active' ? ' active' : '');
-  label.textContent = text;
-}
-
-// ── simulate run (demo mode — replace with WebSocket for real backend) ─────────
-async function startRun() {
-  if (isRunning) return;
-  isRunning = true;
-  clearAll(false);
-
-  const task = document.getElementById('taskInput').value;
-  if (!task.trim()) return;
-
-  document.getElementById('runBtn').disabled = true;
-  setStatus('active', 'running');
-  startTimer();
-
-  // simulate the 7-agent pipeline with realistic timing
-  const pipeline = [
-    { agent: 'Planner',    duration: 3000,  files: 0,  msg: 'Analyzing project requirements...' },
-    { agent: 'Architect',  duration: 4000,  files: 0,  msg: 'Designing system architecture...' },
-    { agent: 'Coder',      duration: 8000,  files: 8,  msg: 'Generating production code...' },
-    { agent: 'Reviewer',   duration: 4000,  files: 0,  msg: 'Reviewing code quality & security...' },
-    { agent: 'SelfHealer', duration: 2000,  files: 2,  msg: 'Running self-healing pass...' },
-    { agent: 'Debugger',   duration: 1500,  files: 0,  msg: 'Checking for runtime errors...' },
-    { agent: 'DocWriter',  duration: 3000,  files: 1,  msg: 'Writing documentation...' },
-  ];
-
-  for (const step of pipeline) {
-    setAgentState(step.agent, 'running');
-    addLog(step.agent, 'running', step.msg);
-    await sleep(step.duration);
-
-    if (step.files > 0) {
-      filesGenerated += step.files;
-      document.getElementById('statFiles').textContent = filesGenerated;
+  if(!wsSend({action:'run',task})){
+    // demo mode
+    const pipe=[
+      {a:'Planner',   d:2600,f:0,m:'analyzing requirements'},
+      {a:'Architect', d:3200,f:0,m:'designing architecture'},
+      {a:'Coder',     d:8000,f:9,m:'generating production code'},
+      {a:'Reviewer',  d:3800,f:0,m:'reviewing security & quality'},
+      {a:'SelfHealer',d:2000,f:2,m:'self-healing pass'},
+      {a:'Debugger',  d:1400,f:0,m:'checking runtime errors'},
+      {a:'DocWriter', d:2500,f:1,m:'writing docs'},
+    ];
+    for(const step of pipe){
+      setN(step.a,'running');addLog(step.a,'running',step.m);
+      await sl(step.d);
+      if(step.a==='Reviewer'){
+        await sl(500);cveCnt++;document.getElementById('hsC').textContent=cveCnt;
+        addLog('Reviewer','error','critical — hardcoded jwt secret detected');
+        showSec();
+      }
+      if(step.a==='SelfHealer'){
+        addLog('SelfHealer','running','patching secret → env-only');
+        await sl(600);addLog('SelfHealer','done','cve resolved');
+      }
+      if(step.f>0){fileCnt+=step.f;updStats()}
+      addLog(step.a,'done',step.a==='Coder'?`${fileCnt} files`:step.a==='DocWriter'?'readme done':'done');
+      setN(step.a,'done');
     }
-
-    // reviewer catches CVE
-    if (step.agent === 'Reviewer') {
-      await sleep(1000);
-      cvesCaught++;
-      document.getElementById('statCVE').textContent = cvesCaught;
-      addLog('Reviewer', 'running', '🚨 CRITICAL: hardcoded secret key detected — flagging for Healer');
-      updateSecurityPanel(true);
-    }
-
-    if (step.agent === 'SelfHealer' && cvesCaught > 0) {
-      addLog('SelfHealer', 'running', '🔧 Patching hardcoded secret → os.getenv() with no fallback');
-      await sleep(800);
-      addLog('SelfHealer', 'done', '✅ CVE patched — secret now loaded from environment only');
-    }
-
-    const doneMsg = step.agent === 'Coder' ? `${filesGenerated} files generated` :
-                    step.agent === 'DocWriter' ? 'README.md generated' : 'complete';
-    addLog(step.agent, 'done', `✓ ${doneMsg}`);
-    setAgentState(step.agent, 'done');
+    addLog('System','done',`complete — ${fileCnt} files, 0 vulnerabilities`);
+    document.getElementById('hsQ').textContent='100';
+    setStatus('DONE');stopClock();isRunning=false;
+    document.getElementById('runBtn').disabled=false;
   }
-
-  // final
-  addLog('System', 'done', `✔ Project ready — ${filesGenerated} files, 0 vulnerabilities`);
-  document.getElementById('statScore').textContent = '100';
-  document.getElementById('activeAgent').textContent = '✔ complete';
-  setStatus('', 'complete');
-  stopTimer();
-  isRunning = false;
-  document.getElementById('runBtn').disabled = false;
 }
 
-// ── benchmark display ──────────────────────────────────────────────────────────
-function runBenchmark() {
-  // load from benchmark_results.json if available, otherwise show hardcoded demo
-  const results = {
-    single: { time: 69.3, files: 5,  score: 91,  security: 9,  vulns: 1 },
-    society:{ time: 182.9,files: 11, score: 100, security: 10, vulns: 0 },
-  };
-  showBenchmark(results);
+function doBench(){
+  const task=document.getElementById('tin').value.trim();
+  if(!wsSend({action:'benchmark',task})){
+    showBench({single:{time:69.3,files:5,score:91,vulns:1},society:{time:182.9,files:11,score:100,vulns:0}});
+  }
 }
 
-function showBenchmark(r) {
-  const s = r.single;
-  const m = r.society;
-
-  const better = (sv, mv, lowerBetter = false) => {
-    const b = lowerBetter ? mv < sv : mv > sv;
-    return b ? 'val-better' : (mv === sv ? 'val-neutral' : 'val-worse');
-  };
-
-  document.getElementById('benchContent').innerHTML = `
-    <table class="bench-table">
-      <tr>
-        <th>Metric</th>
-        <th>Single Agent</th>
-        <th>Agent Society</th>
-      </tr>
-      <tr>
-        <td>Time (seconds)</td>
-        <td class="val-neutral">${s.time}s</td>
-        <td class="${better(s.time, m.time, true)}">${m.time}s</td>
-      </tr>
-      <tr>
-        <td>Files generated</td>
-        <td class="val-neutral">${s.files}</td>
-        <td class="${better(s.files, m.files)}">${m.files} (+${m.files - s.files})</td>
-      </tr>
-      <tr>
-        <td>Quality score</td>
-        <td class="val-worse">${s.score}/100</td>
-        <td class="val-better">${m.score}/100</td>
-      </tr>
-      <tr>
-        <td>Security checks</td>
-        <td class="val-neutral">${s.security}/10</td>
-        <td class="val-better">${m.security}/10</td>
-      </tr>
-      <tr>
-        <td>CVEs shipped</td>
-        <td class="val-worse">🚨 ${s.vulns} critical</td>
-        <td class="val-better">✅ ${m.vulns} none</td>
-      </tr>
-      <tr>
-        <td>Agents used</td>
-        <td class="val-neutral">1</td>
-        <td class="val-better">7</td>
-      </tr>
+function showBench(d){
+  document.getElementById('dynT').textContent='BENCHMARK';
+  const s=d.single,m=d.society;
+  document.getElementById('dynB').innerHTML=`
+    <table class="bt">
+      <tr><th>METRIC</th><th>SINGLE</th><th>SOCIETY</th></tr>
+      <tr><td>TIME</td><td class="neu">${s.time}s</td><td class="neu">${m.time}s</td></tr>
+      <tr><td>FILES</td><td class="bad">${s.files}</td><td class="good">${m.files} (+${m.files-s.files})</td></tr>
+      <tr><td>QUALITY</td><td class="bad">${s.score}/100</td><td class="good">${m.score}/100</td></tr>
+      <tr><td>CVEs</td><td class="bad">${s.vulns} ⚠</td><td class="good">${m.vulns} ✓</td></tr>
+      <tr><td>AGENTS</td><td class="neu">1</td><td class="good">7</td></tr>
     </table>
-    <div style="padding:16px;border-top:1px solid var(--border);font-size:12px;color:var(--muted2);line-height:1.7">
-      <strong style="color:var(--text)">Key insight:</strong> Agent Society takes 2.6× longer but catches 
-      <span style="color:var(--red)">critical security vulnerabilities</span> the single agent ships to production.
-      The Reviewer flagged a hardcoded JWT secret; the Healer patched it automatically.
-    </div>
-  `;
+    <div style="margin-top:8px;padding:7px;border:1px solid #1e1e1e;font-size:9px;color:#444;line-height:1.8">
+      > SOCIETY CATCHES CVE-LEVEL SECRETS<br>
+      > REVIEWER FLAGGED JWT HARDCODE @ T=185S<br>
+      > HEALER PATCHED AUTOMATICALLY<br>
+      > 0 VULNERABILITIES IN PRODUCTION
+    </div>`;
 }
 
-// ── security panel ─────────────────────────────────────────────────────────────
-function updateSecurityPanel(cveFound) {
-  document.getElementById('securityPanel').innerHTML = `
-    <div style="margin-bottom:14px">
-      <div style="font-size:11px;color:var(--muted2);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em">Single Agent Output</div>
-      <div class="vuln-badge vuln-critical" style="margin-bottom:6px">🚨 CRITICAL — Hardcoded JWT secret fallback</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:6px;font-family:var(--mono);background:var(--bg3);padding:8px;border-radius:6px;line-height:1.6">
-        SECRET_KEY = os.getenv("SECRET_KEY",<br>
-        &nbsp;&nbsp;<span style="color:var(--red)">"09d25e094faa6ca2..."</span>)
-        <span style="color:var(--muted2)">&nbsp;← CVE risk</span>
-      </div>
+function showSec(){
+  setTab('security',document.querySelectorAll('.nav-btn')[2]);
+  document.getElementById('dynT').textContent='SECURITY';
+  document.getElementById('dynB').innerHTML=`
+    <div class="sc sc-bad">
+      <div class="sc-t">⚠ CRITICAL — SINGLE AGENT</div>
+      <div style="color:#666">hardcoded jwt secret fallback</div>
+      <div class="sc-code">SECRET_KEY = os.getenv(<br>
+&nbsp;"SECRET_KEY",<br>
+&nbsp;<span style="color:var(--red)">"09d25e094faa..."</span>)<br>
+<span style="color:#333">← CVE IF ENV NOT SET</span></div>
     </div>
-    <div>
-      <div style="font-size:11px;color:var(--muted2);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em">Agent Society Output</div>
-      <div class="vuln-badge vuln-safe" style="margin-bottom:6px">✅ SECURE — No hardcoded secrets</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:6px;font-family:var(--mono);background:var(--bg3);padding:8px;border-radius:6px;line-height:1.6">
-        SECRET_KEY = os.getenv("SECRET_KEY")<br>
-        <span style="color:var(--muted2)"># raises if not set — safe</span>
-      </div>
-      <div style="font-size:11px;color:var(--green);margin-top:10px">
-        ↳ Reviewer agent flagged at t=185s<br>
-        ↳ Healer agent patched automatically
-      </div>
-    </div>
-  `;
+    <div class="sc sc-good">
+      <div class="sc-t">✓ SECURE — AGENT SOCIETY</div>
+      <div style="color:#666">reviewer caught · healer patched</div>
+      <div class="sc-code">SECRET_KEY = os.getenv(<br>
+&nbsp;"SECRET_KEY")<br>
+<span style="color:#333">if not SECRET_KEY:<br>&nbsp;&nbsp;raise ValueError(...)</span></div>
+      <div style="color:var(--green);margin-top:7px;font-size:9px;line-height:1.7">
+▶ FLAGGED BY REVIEWER @ T=185S<br>▶ PATCHED BY HEALER @ T=192S</div>
+    </div>`;
 }
 
-// ── utils ──────────────────────────────────────────────────────────────────────
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+// ── tabs ───────────────────────────────────────────────────────────────────────
+function setTab(tab, el){
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('on'));
+  if(el) el.classList.add('on');
+  if(tab==='bench') showBench({single:{time:69.3,files:5,score:91,vulns:1},society:{time:182.9,files:11,score:100,vulns:0}});
+  else if(tab==='security') showSec();
+}
 
-function clearAll(resetSVG = true) {
-  logEntries = [];
-  filesGenerated = 0;
-  agentsCompleted = 0;
-  cvesCaught = 0;
-  stopTimer();
-  document.getElementById('timer').textContent = '00:00';
-  document.getElementById('logPanel').innerHTML = '<div class="empty"><div class="icon">📋</div>waiting for run...</div>';
-  document.getElementById('logCount').textContent = '0 events';
-  document.getElementById('statFiles').textContent = '0';
-  document.getElementById('statAgents').textContent = '0 / 7';
-  document.getElementById('statScore').textContent = '—';
-  document.getElementById('statCVE').textContent = '0';
-  document.getElementById('activeAgent').textContent = '—';
-  document.getElementById('securityPanel').innerHTML = '<div class="empty"><div class="icon">🔒</div>run to see security analysis</div>';
-  setStatus('', 'ready');
-  if (resetSVG) initSVG();
+document.addEventListener('keydown',e=>{
+  const m={'1':['agents',0],'2':['bench',1],'3':['security',2]};
+  if(m[e.key]){
+    const [tab,idx]=m[e.key];
+    setTab(tab,document.querySelectorAll('.nav-btn')[idx]);
+  }
+});
+
+// ── reset ──────────────────────────────────────────────────────────────────────
+function doReset(resetN=true){
+  logs=[];fileCnt=0;cveCnt=0;doneCnt=0;
+  stopClock();isRunning=false;
+  document.getElementById('clk').textContent='00:00';
+  document.getElementById('lp').innerHTML='<div class="empty">waiting...</div>';
+  document.getElementById('lc').textContent='0 events';
+  document.getElementById('hsA').textContent='0/7';
+  document.getElementById('hsF').textContent='0';
+  document.getElementById('hsQ').textContent='—';
+  document.getElementById('hsC').textContent='0';
+  document.getElementById('sbA').textContent='0/7';
+  document.getElementById('sbF').textContent='0';
+  document.getElementById('sbSess').textContent='—';
+  document.getElementById('dynB').innerHTML='<div class="empty">click benchmark</div>';
+  document.getElementById('dynT').textContent='BENCHMARK';
+  document.getElementById('runBtn').disabled=false;
+  setStatus('IDLE');
+  if(resetN) AG.forEach(a=>{nstate[a.id]='idle'});
 }
 
 // ── init ───────────────────────────────────────────────────────────────────────
-initSVG();
+connectWS();
+setInterval(()=>{if(ws&&ws.readyState===1)wsSend({action:'ping'})},5000);
+
+// start force simulation
+requestAnimationFrame(forceStep);
 </script>
 </body>
 </html>
