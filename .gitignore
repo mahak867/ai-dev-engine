@@ -10,3 +10,8 @@ desktop.ini
 .env
 qwen-test*/
 test-run*/
+benchmark_results.json
+runs/
+qwen-test*/
+test-run*/
+benchmark_runs/
