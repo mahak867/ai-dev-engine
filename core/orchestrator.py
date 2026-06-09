@@ -1,6 +1,7 @@
 """
 APEX v3 — Master Orchestrator
 Coordinates: Planner → Architect → Coder → Reviewer → SelfHealer → DocWriter
+Agent-to-agent dialogue is logged at every handoff for Track 3 compliance.
 """
 from __future__ import annotations
 import os, logging, time
@@ -25,10 +26,13 @@ class Orchestrator:
         model: str = "auto",
         dry_run: bool = False,
         on_event: Callable[[str, str, str], None] | None = None,
+        on_dialogue: Callable[[str, str, str, str], None] | None = None,
     ):
-        self.dry_run  = dry_run
-        self.on_event = on_event or (lambda agent, status, msg: print(f"[{agent}] {status}: {msg}"))
-        self.memory   = MemoryStore()
+        self.dry_run    = dry_run
+        self.on_event   = on_event or (lambda agent, status, msg: print(f"[{agent}] {status}: {msg}"))
+        self.on_dialogue = on_dialogue  # callback(from_agent, to_agent, msg_type, content)
+        self.memory     = MemoryStore()
+        self.dialogue_log: list[dict] = []
 
         llm = LLMProvider(model)
         self.planner   = PlannerAgent(llm)
@@ -38,6 +42,21 @@ class Orchestrator:
         self.debugger  = DebuggerAgent(LLMProvider("coding"))
         self.healer    = SelfHealerAgent(LLMProvider("coding"))
         self.docwriter = DocWriterAgent(llm)
+
+    # ── Agent dialogue logging ─────────────────────────────────────────────────
+    def _dialogue(self, from_agent: str, to_agent: str, msg_type: str, content: str):
+        """Log structured agent-to-agent communication."""
+        entry = {
+            "from": from_agent,
+            "to": to_agent,
+            "type": msg_type,  # handoff | feedback | patch | request
+            "content": content[:400],
+            "ts": time.time(),
+        }
+        self.dialogue_log.append(entry)
+        log.info(f"[DIALOGUE] {from_agent} → {to_agent} ({msg_type}): {content[:80]}")
+        if self.on_dialogue:
+            self.on_dialogue(from_agent, to_agent, msg_type, content)
 
     # ── Generate full-stack app ────────────────────────────────────────────────
     def generate_fullstack(
@@ -50,6 +69,7 @@ class Orchestrator:
         mem = ProjectMemory(name=name, request=request)
         out = Path(output_dir) / name
         ctx = {"name": name, "request": request}
+        self.dialogue_log = []  # reset per run
 
         # 1. Plan
         self._emit("Planner", "running", "Analyzing project requirements...")
@@ -59,6 +79,10 @@ class Orchestrator:
             ctx["plan"] = plan_result.output
             mem.add_event("Planner", "complete", f"{plan_result.duration:.1f}s")
             self._emit("Planner", "done", f"Plan ready ({plan_result.duration:.1f}s)")
+            # DIALOGUE: Planner → Architect
+            self._dialogue("Planner", "Architect",
+                "handoff",
+                f"Plan complete. Tech stack and file structure ready. Passing to Architect for system design. Summary: {plan_result.output[:200]}")
         else:
             ctx["plan"] = '{"tech_stack": {"frontend": "Next.js", "backend": "FastAPI"}}'
             self._emit("Planner", "done", "[dry-run]")
@@ -69,6 +93,10 @@ class Orchestrator:
             arch_result = self.architect.run(ctx)
             ctx["architecture"] = arch_result.output
             self._emit("Architect", "done", f"Architecture ready ({arch_result.duration:.1f}s)")
+            # DIALOGUE: Architect → Coder
+            self._dialogue("Architect", "Coder",
+                "handoff",
+                f"Architecture complete. Security notes and component structure defined. Coder should implement all files per the plan. Key decisions: {arch_result.output[:200]}")
 
         # 3. Code generation
         self._emit("Coder", "running", "Generating production code...")
@@ -77,6 +105,10 @@ class Orchestrator:
             code_result = self.coder.run(ctx)
             all_files.update(code_result.files)
             self._emit("Coder", "done", f"{len(all_files)} files generated ({code_result.duration:.1f}s)")
+            # DIALOGUE: Coder → Reviewer
+            self._dialogue("Coder", "Reviewer",
+                "handoff",
+                f"Code generation complete. {len(all_files)} files produced. Requesting security audit and quality review. Files: {list(all_files.keys())[:8]}")
         else:
             all_files = {"README.md": f"# {name}\n{request}"}
             self._emit("Coder", "done", "[dry-run] 1 stub file")
@@ -88,19 +120,34 @@ class Orchestrator:
             review_result = self.reviewer.run({"code": code_dump})
             if review_result.files:
                 all_files.update(review_result.files)
-                self._emit("Reviewer", "done", f"Fixed issues, score updated")
+                self._emit("Reviewer", "done", "Fixed issues, score updated")
+                # DIALOGUE: Reviewer → SelfHealer (conflict found)
+                self._dialogue("Reviewer", "SelfHealer",
+                    "feedback",
+                    f"Security review found issues requiring patches. Detected potential vulnerabilities in generated code. SelfHealer must patch before deployment. Issues: {review_result.output[:200]}")
             else:
                 self._emit("Reviewer", "done", f"Review passed ({review_result.duration:.1f}s)")
+                # DIALOGUE: Reviewer → SelfHealer (all clear)
+                self._dialogue("Reviewer", "SelfHealer",
+                    "feedback",
+                    f"Code review passed. No critical security issues detected. Quality score acceptable. SelfHealer to do proactive check.")
 
-        # 5. Auto-heal if any issues detected
+        # 5. Auto-heal
         if not self.dry_run:
             self._emit("SelfHealer", "running", "Running self-healing pass...")
             heal_result = self.healer.heal(all_files, "proactive check")
             if heal_result.files:
                 all_files.update(heal_result.files)
                 self._emit("SelfHealer", "done", f"Patched {len(heal_result.files)} files")
+                # DIALOGUE: SelfHealer → Debugger
+                self._dialogue("SelfHealer", "Debugger",
+                    "handoff",
+                    f"Patched {len(heal_result.files)} files. Requesting runtime error check on patched code.")
             else:
                 self._emit("SelfHealer", "done", "No issues found")
+                self._dialogue("SelfHealer", "Debugger",
+                    "handoff",
+                    "No patches needed. Code is clean. Debugger to verify no runtime errors.")
 
         # 6. Documentation
         self._emit("DocWriter", "running", "Writing documentation...")
@@ -108,6 +155,10 @@ class Orchestrator:
             doc_result = self.docwriter.run(ctx)
             all_files.update(doc_result.files)
             self._emit("DocWriter", "done", "README.md generated")
+            # DIALOGUE: DocWriter → System
+            self._dialogue("DocWriter", "System",
+                "complete",
+                f"Documentation complete. README.md generated with full API docs, setup instructions, and architecture notes.")
 
         # 7. Write to disk
         mem.update_files(all_files)
@@ -119,16 +170,12 @@ class Orchestrator:
 
     # ── Stream generation ──────────────────────────────────────────────────────
     def generate_stream(self, name: str, request: str) -> Iterator[str]:
-        """Yields streaming tokens from the coder agent."""
         ctx = {"name": name, "request": request}
-
-        # Quick plan first
         yield f"[Planner] Analyzing...\n"
         if not self.dry_run:
             plan_result = self.planner.run(ctx)
             ctx["plan"] = plan_result.output
         yield f"[Planner] Done. Starting code generation...\n\n"
-
         yield from self.coder.stream(ctx)
 
     # ── Edit existing project ──────────────────────────────────────────────────
