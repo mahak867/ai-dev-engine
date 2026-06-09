@@ -577,7 +577,10 @@ svg.addEventListener('wheel',e=>{
 // ── WebSocket ──────────────────────────────────────────────────────────────────
 let ws=null, wsRetry=null;
 function connectWS(){
-  ws=new WebSocket('ws://127.0.0.1:8000/ws');
+  const wsProto=window.location.protocol==='https:'?'wss:':'ws:';
+  const wsHost=window.location.hostname||'127.0.0.1';
+  const wsPort=window.location.port||'8000';
+  ws=new WebSocket(wsProto+'//'+wsHost+':'+wsPort+'/ws');
   ws.onopen=()=>{
     document.getElementById('wsd').className='ws-dot on';
     document.getElementById('wst').textContent='connected';
