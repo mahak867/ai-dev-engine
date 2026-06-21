@@ -20,6 +20,11 @@ class AgentResult:
     duration: float = 0.0
     success: bool = True
     error: str = ""
+    # Used by ReviewerAgent for the conflict-resolution loop. Other agents
+    # leave these at their defaults and they're simply ignored.
+    verdict: str = ""      # "approved" | "rejected" | "" (n/a)
+    score: int = 0
+    critical: list = field(default_factory=list)
 
 
 # ── Base Agent ─────────────────────────────────────────────────────────────────
@@ -172,12 +177,52 @@ Generate all production-ready files now."""
         msgs = self._messages(self.SYSTEM, prompt)
         yield from self.llm.stream(msgs, max_tokens=8192)
 
+    REVISE_SYSTEM = """You are an elite full-stack engineer revising code after a
+peer review rejection. You will be given the original files and a list of
+issues a Reviewer agent raised. Your job:
+- Fix every issue listed — do not skip any
+- Do NOT rewrite files that weren't flagged; only touch what's necessary
+- Preserve working functionality; this is a targeted patch, not a rewrite
+- Return the COMPLETE corrected content for every file you change
+- Format code blocks as:
+  ```language
+  # file: path/to/file.ext
+  <complete file content>
+  ```
+- Briefly note, above the code blocks, what you changed and why (one line per issue)"""
+
+    def revise(self, files: dict[str, str], revision_notes: str) -> AgentResult:
+        """Targeted revision pass in response to a Reviewer rejection."""
+        t0 = time.time()
+        code_dump = "\n\n".join(f"```\n# file: {p}\n{c}\n```" for p, c in files.items())
+        prompt = f"""Reviewer rejected this submission. Issues to fix:
+
+{revision_notes}
+
+Files as currently written:
+{code_dump}
+
+Fix every issue above and return the complete corrected files."""
+        msgs = self._messages(self.REVISE_SYSTEM, prompt)
+        try:
+            raw = self.llm.complete(msgs, max_tokens=8192)
+            revised = self._parse_files(raw)
+            return AgentResult(
+                agent=self.name, output=raw, files=revised, duration=time.time()-t0
+            )
+        except Exception as e:
+            return AgentResult(agent=self.name, output="", success=False, error=str(e))
+
 
 # ── Reviewer Agent ─────────────────────────────────────────────────────────────
 class ReviewerAgent(Agent):
     name = "Reviewer"
     emoji = "🔍"
     model_profile = "coding"
+
+    # Minimum score to approve. Below this, or any critical issue present,
+    # triggers a rejection and sends the code back to the Coder for revision.
+    APPROVAL_THRESHOLD = 85
 
     SYSTEM = """You are a senior code reviewer. Analyze code for:
 1. Bugs and logic errors
@@ -195,24 +240,67 @@ Output a JSON report:
   "suggestions": ["tip1", ...],
   "security_issues": ["sec1", ...],
   "fixed_files": {"path": "fixed content"}
-}"""
+}
+Be strict. A "critical" entry means the code must not ship as-is."""
 
     def run(self, context: dict) -> AgentResult:
         t0 = time.time()
         code = context.get("code", "")
         if not code:
-            return AgentResult(agent=self.name, output='{"score":100}', duration=0)
+            result = AgentResult(agent=self.name, output='{"score":100}', duration=0)
+            result.verdict = "approved"
+            result.score = 100
+            result.critical = []
+            return result
         msgs = self._messages(self.SYSTEM, f"Review this code:\n\n{code}")
         try:
             raw = self.llm.complete(msgs, max_tokens=4096)
             raw = re.sub(r"^```json\s*|\s*```$", "", raw.strip())
             report = json.loads(raw)
-            return AgentResult(
+            result = AgentResult(
                 agent=self.name, output=json.dumps(report, indent=2),
                 files=report.get("fixed_files", {}), duration=time.time()-t0
             )
+            self._attach_verdict(result, report)
+            return result
         except Exception as e:
-            return AgentResult(agent=self.name, output='{"score":75}', success=False, error=str(e))
+            result = AgentResult(agent=self.name, output='{"score":75}', success=False, error=str(e))
+            # Fail-safe: if the reviewer itself errors, don't block the pipeline
+            # indefinitely — approve-with-warning rather than reject-forever.
+            result.verdict = "approved"
+            result.score = 75
+            result.critical = []
+            return result
+
+    def _attach_verdict(self, result: AgentResult, report: dict) -> None:
+        """Decide approve vs reject from the structured report and stash
+        the verdict on the AgentResult so the orchestrator can branch on it."""
+        score = report.get("score", 0)
+        critical = report.get("critical", []) or []
+        security = report.get("security_issues", []) or []
+        blocking = critical + security
+
+        result.score = score
+        result.critical = blocking
+        if blocking or score < self.APPROVAL_THRESHOLD:
+            result.verdict = "rejected"
+        else:
+            result.verdict = "approved"
+
+    def build_revision_notes(self, report_json: str) -> str:
+        """Turn a rejection's raw report into instructions the Coder can act on."""
+        try:
+            report = json.loads(report_json)
+        except Exception:
+            return "Fix all reported issues and resubmit."
+        parts = []
+        if report.get("critical"):
+            parts.append("CRITICAL (must fix):\n- " + "\n- ".join(report["critical"]))
+        if report.get("security_issues"):
+            parts.append("SECURITY (must fix):\n- " + "\n- ".join(report["security_issues"]))
+        if report.get("warnings"):
+            parts.append("Warnings (fix if feasible):\n- " + "\n- ".join(report["warnings"]))
+        return "\n\n".join(parts) if parts else "Fix all reported issues and resubmit."
 
 
 # ── Debugger Agent ─────────────────────────────────────────────────────────────

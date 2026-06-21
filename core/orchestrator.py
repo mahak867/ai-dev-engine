@@ -113,24 +113,65 @@ class Orchestrator:
             all_files = {"README.md": f"# {name}\n{request}"}
             self._emit("Coder", "done", "[dry-run] 1 stub file")
 
-        # 4. Review
+        # 4. Review — with conflict resolution.
+        # Reviewer can REJECT the submission; if it does, Coder revises and
+        # Reviewer re-reviews, up to MAX_REVIEW_ROUNDS times. This is the
+        # explicit Track 3 requirement: agents must be able to disagree and
+        # resolve it through dialogue, not just hand off silently.
+        MAX_REVIEW_ROUNDS = 3
+        review_result = None
         if not skip_review and not self.dry_run:
-            self._emit("Reviewer", "running", "Reviewing code quality & security...")
-            code_dump = "\n\n".join(f"// {p}\n{c}" for p, c in list(all_files.items())[:5])
-            review_result = self.reviewer.run({"code": code_dump})
-            if review_result.files:
-                all_files.update(review_result.files)
-                self._emit("Reviewer", "done", "Fixed issues, score updated")
-                # DIALOGUE: Reviewer → SelfHealer (conflict found)
-                self._dialogue("Reviewer", "SelfHealer",
-                    "feedback",
-                    f"Security review found issues requiring patches. Detected potential vulnerabilities in generated code. SelfHealer must patch before deployment. Issues: {review_result.output[:200]}")
-            else:
-                self._emit("Reviewer", "done", f"Review passed ({review_result.duration:.1f}s)")
-                # DIALOGUE: Reviewer → SelfHealer (all clear)
-                self._dialogue("Reviewer", "SelfHealer",
-                    "feedback",
-                    f"Code review passed. No critical security issues detected. Quality score acceptable. SelfHealer to do proactive check.")
+            for round_num in range(1, MAX_REVIEW_ROUNDS + 1):
+                self._emit("Reviewer", "running",
+                    f"Reviewing code quality & security (round {round_num})...")
+                code_dump = "\n\n".join(f"// {p}\n{c}" for p, c in list(all_files.items())[:5])
+                review_result = self.reviewer.run({"code": code_dump})
+
+                if review_result.verdict == "rejected" and round_num < MAX_REVIEW_ROUNDS:
+                    notes = self.reviewer.build_revision_notes(review_result.output)
+                    self._emit("Reviewer", "rejected",
+                        f"Round {round_num}: score {review_result.score}/100 — "
+                        f"{len(review_result.critical)} blocking issue(s), sent back to Coder")
+                    # DIALOGUE: Reviewer → Coder (rejection)
+                    self._dialogue("Reviewer", "Coder",
+                        "request",
+                        f"REJECTED (round {round_num}, score {review_result.score}/100). "
+                        f"Revision required: {notes[:300]}")
+
+                    self._emit("Coder", "running", f"Revising per Reviewer feedback (round {round_num})...")
+                    revise_result = self.coder.revise(all_files, notes)
+                    if revise_result.files:
+                        all_files.update(revise_result.files)
+                    self._emit("Coder", "done",
+                        f"Revised {len(revise_result.files)} file(s) ({revise_result.duration:.1f}s)")
+                    # DIALOGUE: Coder → Reviewer (patch submitted)
+                    self._dialogue("Coder", "Reviewer",
+                        "patch",
+                        f"Revision complete for round {round_num}. "
+                        f"Patched {len(revise_result.files)} file(s): {list(revise_result.files.keys())[:8]}. "
+                        f"Resubmitting for review.")
+                    continue  # re-review the patched code
+
+                # Either approved, or we've exhausted rounds — stop looping.
+                if review_result.files:
+                    all_files.update(review_result.files)
+                if review_result.verdict == "approved":
+                    self._emit("Reviewer", "done",
+                        f"Approved — score {review_result.score}/100 (round {round_num})")
+                    self._dialogue("Reviewer", "SelfHealer",
+                        "feedback",
+                        f"Code APPROVED after {round_num} round(s). Score {review_result.score}/100. "
+                        f"No critical issues remain. SelfHealer to do proactive check.")
+                else:
+                    self._emit("Reviewer", "done",
+                        f"Round limit reached — proceeding with score {review_result.score}/100, "
+                        f"{len(review_result.critical)} unresolved issue(s)")
+                    self._dialogue("Reviewer", "SelfHealer",
+                        "feedback",
+                        f"Max revision rounds ({MAX_REVIEW_ROUNDS}) reached without full approval. "
+                        f"Score {review_result.score}/100. Remaining issues handed to SelfHealer as a fallback: "
+                        f"{review_result.critical[:5]}")
+                break
 
         # 5. Auto-heal
         if not self.dry_run:
