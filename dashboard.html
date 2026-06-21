@@ -113,7 +113,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .lts{color:var(--dim);min-width:30px;font-size:9px}
 .lag{min-width:62px;font-weight:bold;font-size:9px}
 .lmsg{color:var(--sub);flex:1;line-height:1.4;font-size:9px}
-.cdone{color:var(--green)}.crun{color:var(--yellow)}.cerr{color:var(--red)}
+.cdone{color:var(--green)}.crun{color:var(--yellow)}.cerr{color:var(--red)}.crej{color:var(--red);font-weight:600}.cdlg{color:#bb88ff}
 .aPlanner{color:var(--yellow)}.aArchitect{color:var(--cyan)}.aCoder{color:#bb88ff}
 .aReviewer{color:var(--blue)}.aSelfHealer{color:var(--green)}.aDebugger{color:var(--red)}
 .aDocWriter{color:var(--sub)}.aSystem{color:var(--orange)}
@@ -131,6 +131,18 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .sc-bad .sc-t{color:var(--red)}.sc-good .sc-t{color:var(--green)}
 .sc-code{font-family:var(--mono);font-size:9px;color:var(--dim);background:#000;padding:5px 6px;margin-top:5px;line-height:1.7}
 .empty{text-align:center;padding:18px;color:var(--dim);font-size:10px}
+
+/* live agent dialogue feed */
+.dlg-feed{display:flex;flex-direction:column;gap:6px;max-height:100%;overflow-y:auto}
+.dlg-row{border-radius:2px;padding:6px 8px;font-size:9px;border:1px solid var(--b1);background:#0c0c0c}
+.dlg-row.sc-bad{border-color:rgba(255,68,68,0.25);background:rgba(255,68,68,0.04)}
+.dlg-row.sc-good{border-color:rgba(0,255,136,0.25);background:rgba(0,255,136,0.04)}
+.dlg-meta{display:flex;justify-content:space-between;color:var(--sub);margin-bottom:3px;letter-spacing:0.03em}
+.dlg-arrow{color:#bb88ff;font-weight:600}
+.dlg-type{text-transform:uppercase;color:var(--dim);font-size:8px}
+.dlg-content{color:var(--sub);line-height:1.5}
+.dlg-row.sc-bad .dlg-arrow{color:var(--red)}
+.dlg-row.sc-good .dlg-arrow{color:var(--green)}
 
 /* statusbar */
 .sbar{background:#000;border-top:1px solid var(--orange);padding:3px 12px;display:flex;gap:22px;align-items:center}
@@ -419,13 +431,27 @@ function drawGraph(){
       g.appendChild(glow);
     }
 
+    if(st==='rejected'){
+      const glow=s('circle');
+      glow.setAttribute('r','36');
+      glow.setAttribute('fill','#ff444415');
+      glow.setAttribute('stroke','#ff4444');
+      glow.setAttribute('stroke-width','1.5');
+      const pa=s('animate');
+      pa.setAttribute('attributeName','opacity');
+      pa.setAttribute('values','1;0.3;1');
+      pa.setAttribute('dur','0.8s');pa.setAttribute('repeatCount','indefinite');
+      glow.appendChild(pa);
+      g.appendChild(glow);
+    }
+
     // node body
     const R=24;
     const body=s('circle');
     body.setAttribute('r',R);
-    body.setAttribute('fill', st==='running'?col+'22': st==='done'?col+'11':'#111');
-    body.setAttribute('stroke', st==='running'?col: st==='done'?col+'88': '#2a2a2a');
-    body.setAttribute('stroke-width', st==='running'?2:1);
+    body.setAttribute('fill', st==='running'?col+'22': st==='rejected'?'#ff444422': st==='done'?col+'11':'#111');
+    body.setAttribute('stroke', st==='running'?col: st==='rejected'?'#ff4444': st==='done'?col+'88': '#2a2a2a');
+    body.setAttribute('stroke-width', st==='running'||st==='rejected'?2:1);
     g.appendChild(body);
 
     // pulse animation on node body when running
@@ -455,7 +481,7 @@ function drawGraph(){
     lbl.setAttribute('y','38');
     lbl.setAttribute('font-size','9');
     lbl.setAttribute('font-family','Share Tech Mono,monospace');
-    lbl.setAttribute('fill', st==='running'?col: st==='done'?col+'99':'#444');
+    lbl.setAttribute('fill', st==='running'?col: st==='rejected'?'#ff4444': st==='done'?col+'99':'#444');
     lbl.setAttribute('letter-spacing','1');
     lbl.textContent=ag.lbl.toUpperCase();
     g.appendChild(lbl);
@@ -608,11 +634,17 @@ function handleMsg(m){
     addLog(agent,status,msg,elapsed);
     if(status==='running') setN(agent,'running');
     else if(status==='done') setN(agent,'done');
+    else if(status==='rejected'){
+      setN(agent,'rejected');
+    }
     else if(status==='error'){
       if(agent==='Reviewer'&&msg.includes('secret')){
         cveCnt++;document.getElementById('hsC').textContent=cveCnt;
         showSec();
       }
+    }
+    else if(status==='dialogue'&&m.dialogue){
+      addDialogue(m.dialogue);
     }
     const fm=msg&&msg.match(/(\d+) files/);
     if(fm){fileCnt=parseInt(fm[1]);updStats()}
@@ -623,6 +655,24 @@ function handleMsg(m){
     }
     if(m.benchmark) showBench(m.benchmark);
   }
+}
+
+// ── live agent dialogue feed (reuses the dynPanel slot) ─────────────────────────
+let dialogueEntries=[];
+function addDialogue(d){
+  dialogueEntries.push(d);
+  document.getElementById('dynT').textContent='AGENT DIALOGUE';
+  const rows = dialogueEntries.slice(-12).map(e=>{
+    const cls = e.type==='request'?'sc-bad':e.type==='patch'?'sc-good':'';
+    const arrow = `${e.from} → ${e.to}`;
+    return `<div class="dlg-row ${cls}">
+      <div class="dlg-meta"><span class="dlg-arrow">${arrow}</span><span class="dlg-type">${e.type}</span></div>
+      <div class="dlg-content">${(e.content||'').slice(0,180)}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('dynB').innerHTML = `<div class="dlg-feed">${rows}</div>`;
+  const dynB = document.getElementById('dynB');
+  dynB.scrollTop = dynB.scrollHeight;
 }
 
 // ── node state ─────────────────────────────────────────────────────────────────
@@ -688,9 +738,28 @@ async function doRun(){
       setN(step.a,'running');addLog(step.a,'running',step.m);
       await sl(step.d);
       if(step.a==='Reviewer'){
-        await sl(500);cveCnt++;document.getElementById('hsC').textContent=cveCnt;
+        // conflict resolution beat: reject → coder revises → reviewer approves
+        await sl(400);
+        addLog('Reviewer','rejected','round 1: score 68/100 — 2 blocking issue(s), sent back to Coder');
+        setN('Reviewer','rejected');
+        addDialogue({from:'Reviewer',to:'Coder',type:'request',
+          content:'REJECTED (round 1, score 68/100). Revision required: CRITICAL: hardcoded JWT secret fallback; missing input validation on /api/auth'});
+        await sl(700);
+        setN('Coder','running');addLog('Coder','running','revising per Reviewer feedback (round 1)');
+        await sl(1400);
+        addLog('Coder','done','revised 2 file(s)');
+        setN('Coder','done');
+        addDialogue({from:'Coder',to:'Reviewer',type:'patch',
+          content:'Revision complete for round 1. Patched 2 file(s): auth.py, config.py. Resubmitting for review.'});
+        await sl(600);
+        setN('Reviewer','running');addLog('Reviewer','running','reviewing code quality & security (round 2)');
+        await sl(900);
+        cveCnt++;document.getElementById('hsC').textContent=cveCnt;
         addLog('Reviewer','error','critical — hardcoded jwt secret detected');
         showSec();
+        addLog('Reviewer','done','approved — score 96/100 (round 2)');
+        addDialogue({from:'Reviewer',to:'SelfHealer',type:'feedback',
+          content:'Code APPROVED after 2 round(s). Score 96/100. No critical issues remain. SelfHealer to do proactive check.'});
       }
       if(step.a==='SelfHealer'){
         addLog('SelfHealer','running','patching secret → env-only');
