@@ -12,10 +12,17 @@ log = logging.getLogger("apex.provider")
 # ── Model catalogue ────────────────────────────────────────────────────────────
 MODELS = {
     # ── PRIMARY: Qwen Cloud (hackathon requirement) ───────────────────────────
-    "qwen/qwen-plus":            {"provider": "qwen",  "ctx": 131_072, "free": True},
-    "qwen/qwen-turbo":           {"provider": "qwen",  "ctx": 131_072, "free": True},
-    "qwen/qwen-max":             {"provider": "qwen",  "ctx":  32_768, "free": True},
-    "qwen/qwen-long":            {"provider": "qwen",  "ctx": 10_000_000, "free": True},
+    # Qwen 3.7 (launched May 20, 2026) — agent-tuned flagship, 1M context, no
+    # free tier; billed against hackathon DashScope credits. Plus adds vision
+    # (used for the wireframe-screenshot -> frontend code feature).
+    "qwen/qwen3.7-max":           {"provider": "qwen",  "ctx": 1_000_000, "free": True},
+    "qwen/qwen3.7-plus":          {"provider": "qwen",  "ctx": 1_000_000, "free": True, "vision": True},
+    # Legacy/cheaper Qwen tier — kept as same-provider fallback if 3.7 errors
+    # or credits run low, so the cascade never fully drops out of Qwen Cloud.
+    "qwen/qwen-plus":             {"provider": "qwen",  "ctx": 131_072, "free": True},
+    "qwen/qwen-turbo":            {"provider": "qwen",  "ctx": 131_072, "free": True},
+    "qwen/qwen-max":              {"provider": "qwen",  "ctx":  32_768, "free": True},
+    "qwen/qwen-long":             {"provider": "qwen",  "ctx": 10_000_000, "free": True},
     # ── FREE: Groq (fast fallback) ────────────────────────────────────────────
     "groq/llama-3.3-70b":        {"provider": "groq",  "ctx": 128_000, "free": True},
     "groq/llama-3.1-8b":         {"provider": "groq",  "ctx": 128_000, "free": True},
@@ -39,15 +46,18 @@ MODELS = {
 
 FREE_MODELS = [m for m, i in MODELS.items() if i["free"]]
 PAID_MODELS = [m for m, i in MODELS.items() if not i["free"]]
+VISION_MODELS = [m for m, i in MODELS.items() if i.get("vision")]
 
-# ── Cascades — Qwen first, Groq fallback ──────────────────────────────────────
+# ── Cascades — Qwen 3.7 first, legacy Qwen second, Groq fallback ──────────────
 DEFAULT_CASCADE = [
+    "qwen/qwen3.7-max",
     "qwen/qwen-plus",
     "qwen/qwen-turbo",
     "groq/llama-3.3-70b",
     "groq/qwen-qwq-32b",
 ]
 CODING_CASCADE = [
+    "qwen/qwen3.7-max",
     "qwen/qwen-plus",
     "qwen/qwen-turbo",
     "groq/qwen-qwq-32b",
@@ -56,11 +66,16 @@ CODING_CASCADE = [
     "ollama/deepseek-coder-v2",
 ]
 REASONING_CASCADE = [
+    "qwen/qwen3.7-max",
     "qwen/qwen-max",
     "qwen/qwen-plus",
     "groq/qwen-qwq-32b",
     "groq/llama-3.3-70b",
     "ollama/qwen2.5:72b",
+]
+# Vision-capable cascade — for the wireframe-screenshot -> frontend code feature.
+VISION_CASCADE = [
+    "qwen/qwen3.7-plus",
 ]
 
 
