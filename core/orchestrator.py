@@ -180,7 +180,6 @@ class Orchestrator:
             if heal_result.files:
                 all_files.update(heal_result.files)
                 self._emit("SelfHealer", "done", f"Patched {len(heal_result.files)} files")
-                # DIALOGUE: SelfHealer → Debugger
                 self._dialogue("SelfHealer", "Debugger",
                     "handoff",
                     f"Patched {len(heal_result.files)} files. Requesting runtime error check on patched code.")
@@ -190,23 +189,46 @@ class Orchestrator:
                     "handoff",
                     "No patches needed. Code is clean. Debugger to verify no runtime errors.")
 
+        # 5b. Debugger — runtime error check (now actually runs in pipeline)
+        if not self.dry_run:
+            self._emit("Debugger", "running", "Verifying no runtime errors...")
+            code_sample = "\n\n".join(
+                f"// {fp}\n{c}" for fp, c in list(all_files.items())[:3]
+                if fp.endswith(('.py','.js','.ts','.go','.rs'))
+            ) or "\n\n".join(f"// {fp}\n{c}" for fp, c in list(all_files.items())[:2])
+            debug_result = self.debugger.run({
+                "code": code_sample,
+                "error": "Proactive check: scan for import errors, undefined vars, missing await, type mismatches, and startup crashes."
+            })
+            if debug_result.files:
+                all_files.update(debug_result.files)
+                self._emit("Debugger", "done", f"Fixed {len(debug_result.files)} runtime issue(s)")
+                self._dialogue("Debugger", "DocWriter", "handoff",
+                    f"Fixed {len(debug_result.files)} runtime issue(s). Code ready for documentation.")
+            else:
+                self._emit("Debugger", "done", "No runtime errors found")
+                self._dialogue("Debugger", "DocWriter", "handoff",
+                    "Runtime check passed. No startup errors detected. Passing to DocWriter.")
+
         # 6. Documentation
         self._emit("DocWriter", "running", "Writing documentation...")
         if not self.dry_run:
             doc_result = self.docwriter.run(ctx)
             all_files.update(doc_result.files)
             self._emit("DocWriter", "done", "README.md generated")
-            # DIALOGUE: DocWriter → System
-            self._dialogue("DocWriter", "System",
-                "complete",
-                f"Documentation complete. README.md generated with full API docs, setup instructions, and architecture notes.")
+            self._dialogue("DocWriter", "System", "complete",
+                "Documentation complete. README.md generated with full API docs, setup instructions, and architecture notes.")
 
         # 7. Write to disk
         mem.update_files(all_files)
         self._write_files(out, all_files)
         self.memory.save(mem)
 
+        final_score = review_result.score if review_result else 100
         self._emit("System", "complete", f"Project ready at {out}")
+        self._emit("System", "done",
+            f"complete — {len(all_files)} files generated",
+            {"quality_score": final_score, "files": len(all_files)})
         return str(out)
 
     # ── Stream generation ──────────────────────────────────────────────────────
@@ -252,10 +274,13 @@ class Orchestrator:
         return result.output
 
     # ── Helpers ────────────────────────────────────────────────────────────────
-    def _emit(self, agent: str, status: str, msg: str):
+    def _emit(self, agent: str, status: str, msg: str, extra: dict = None):
         log.info(f"[{agent}] {status}: {msg}")
         if self.on_event:
-            self.on_event(agent, status, msg)
+            try:
+                self.on_event(agent, status, msg, extra or {})
+            except TypeError:
+                self.on_event(agent, status, msg)
 
     def _write_files(self, base: Path, files: dict[str, str]):
         base.mkdir(parents=True, exist_ok=True)

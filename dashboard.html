@@ -233,37 +233,28 @@ const EDGES=[
 ];
 
 // ── force simulation (simple) ─────────────────────────────────────────────────
-let nodes = AG.map(a=>({...a, vx:0, vy:0, pinned:false}));
+let nodes = AG.map(a=>({...a, vx:0, vy:0, pinned:false, _wa:Math.random()*Math.PI*2}));
 let simRunning = true;
 
 function forceStep(){
-  if(!simRunning) return;
-  const k = 0.01;
-  // repulsion
   for(let i=0;i<nodes.length;i++){
     for(let j=i+1;j<nodes.length;j++){
       const dx=nodes[i].x-nodes[j].x, dy=nodes[i].y-nodes[j].y;
       const d=Math.sqrt(dx*dx+dy*dy)||1;
-      const f=3000/(d*d);
-      nodes[i].vx+=dx/d*f; nodes[i].vy+=dy/d*f;
-      nodes[j].vx-=dx/d*f; nodes[j].vy-=dy/d*f;
+      if(d<160){const f=7000/(d*d);nodes[i].vx+=dx/d*f;nodes[i].vy+=dy/d*f;nodes[j].vx-=dx/d*f;nodes[j].vy-=dy/d*f;}
     }
   }
-  // edge attraction
   EDGES.forEach(([a,b])=>{
-    const na=nodes.find(n=>n.id===a), nb=nodes.find(n=>n.id===b);
-    if(!na||!nb) return;
-    const dx=nb.x-na.x, dy=nb.y-na.y;
-    const d=Math.sqrt(dx*dx+dy*dy)||1;
-    const ideal=200, f=(d-ideal)*0.005;
-    na.vx+=dx/d*f; na.vy+=dy/d*f;
-    nb.vx-=dx/d*f; nb.vy-=dy/d*f;
+    const na=nodes.find(n=>n.id===a),nb=nodes.find(n=>n.id===b);if(!na||!nb)return;
+    const dx=nb.x-na.x,dy=nb.y-na.y,d=Math.sqrt(dx*dx+dy*dy)||1,ideal=170,f=(d-ideal)*0.006;
+    na.vx+=dx/d*f;na.vy+=dy/d*f;nb.vx-=dx/d*f;nb.vy-=dy/d*f;
   });
-  // center gravity
   nodes.forEach(n=>{
-    n.vx-=n.x*0.003; n.vy-=n.y*0.003;
-    n.vx*=0.85; n.vy*=0.85;
-    if(!n.pinned){n.x+=n.vx; n.y+=n.vy;}
+    if(nstate[n.id]==='running'){n._wa+=(Math.random()-0.5)*0.3;n.vx+=Math.cos(n._wa)*0.3;n.vy+=Math.sin(n._wa)*0.3;}
+    n.vx-=n.x*0.007;n.vy-=n.y*0.007;n.vx*=0.82;n.vy*=0.82;
+    const spd=Math.sqrt(n.vx*n.vx+n.vy*n.vy);if(spd>3){n.vx=n.vx/spd*3;n.vy=n.vy/spd*3;}
+    if(!n.pinned){n.x+=n.vx;n.y+=n.vy;}
+    n.x=Math.max(-330,Math.min(330,n.x));n.y=Math.max(-230,Math.min(230,n.y));
   });
   requestAnimationFrame(forceStep);
   drawGraph();
@@ -465,14 +456,14 @@ function drawGraph(){
 
     // pixel octopus character via foreignObject
     const fo=s('foreignObject');
-    fo.setAttribute('x','-22');fo.setAttribute('y','-22');
-    fo.setAttribute('width','44');fo.setAttribute('height','44');
+    fo.setAttribute('x','-24');fo.setAttribute('y','-24');
+    fo.setAttribute('width','48');fo.setAttribute('height','54');
     fo.style.pointerEvents='none';fo.style.overflow='visible';
     const div=document.createElementNS('http://www.w3.org/1999/xhtml','div');
-    div.style.cssText='width:44px;height:44px;display:flex;align-items:center;justify-content:center';
+    div.style.cssText='width:48px;height:54px;display:flex;align-items:center;justify-content:center;overflow:hidden';
     const cvs=document.createElementNS('http://www.w3.org/1999/xhtml','canvas');
-    cvs.width=44;cvs.height=44;
-    drawOctopus(cvs,col,st);
+    cvs.width=48;cvs.height=54;
+    drawOctopus(cvs,col,st,ag.id);
     div.appendChild(cvs);fo.appendChild(div);g.appendChild(fo);
 
     // label
@@ -507,74 +498,58 @@ function drawGraph(){
   });
 }
 
-// ── pixel octopus canvas drawing ───────────────────────────────────────────────
-// Recreating the sprite from Octogent's EmptyOctopus.tsx
-const B='B', O='O', E='E', _='';
-const SPRITES={
-  idle:[
-    [_,_,_,_,O,O,O,O,O,O,O,O,_,_,_,_],
-    [_,_,_,O,B,B,B,B,B,B,B,B,O,_,_,_],
-    [_,_,O,B,B,B,B,B,B,B,B,B,B,O,_,_],
-    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
-    [_,O,B,B,E,E,B,B,B,B,E,E,B,B,O,_],
-    [_,O,B,B,E,E,B,B,B,B,E,E,B,B,O,_],
-    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
-    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
-    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
-    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
-    [_,O,B,O,B,B,O,B,B,O,B,B,O,B,O,_],
-    [_,_,O,_,O,_,_,O,_,O,_,_,O,_,_,_],
-    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
-    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
-  ],
-  running:[
-    [_,_,_,_,O,O,O,O,O,O,O,O,_,_,_,_],
-    [_,_,_,O,B,B,B,B,B,B,B,B,O,_,_,_],
-    [_,_,O,B,B,B,B,B,B,B,B,B,B,O,_,_],
-    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
-    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
-    [_,O,B,B,E,E,B,O,O,B,E,E,B,B,O,_], // happy eyes + open mouth
-    [_,O,B,B,E,E,B,O,O,B,E,E,B,B,O,_],
-    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
-    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
-    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
-    [_,O,B,O,B,B,O,B,B,O,B,B,O,B,O,_],
-    [_,_,O,_,O,_,_,O,_,O,_,_,O,_,_,_],
-    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
-    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
-  ],
-  done:[
-    [_,_,_,_,O,O,O,O,O,O,O,O,_,_,_,_],
-    [_,_,_,O,B,B,B,B,B,B,B,B,O,_,_,_],
-    [_,_,O,B,B,B,B,B,B,B,B,B,B,O,_,_],
-    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
-    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
-    [_,O,B,B,B,E,B,B,B,B,B,E,B,B,O,_], // happy ^_^ eyes
-    [_,O,B,B,E,E,B,B,B,B,E,E,B,B,O,_],
-    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
-    [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],
-    [_,O,B,O,B,O,B,B,B,B,O,B,O,B,O,_],
-    [_,_,O,_,O,_,O,_,_,O,_,O,_,_,_,_],
-    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
-    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
-    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
-  ],
+// ── Octogent-style animated octopus ─────────────────────────────────────────
+const B='B',O='O',E='E',_='';const PX=3;
+const HT=[[_,_,_,_,O,O,O,O,O,O,O,O,_,_,_,_],[_,_,_,O,B,B,B,B,B,B,B,B,O,_,_,_],[_,_,O,B,B,B,B,B,B,B,B,B,B,O,_,_]];
+const HB=[[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_]];
+const HB2=[[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],[_,O,B,B,B,O,O,O,O,O,O,O,B,B,O,_],[_,O,B,B,B,O,O,O,O,O,O,O,B,B,O,_],[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_]];
+const HTA=[[_,_,_,_,O,O,O,O,O,O,O,O,_,_,_,_],[_,_,_,O,B,B,B,B,B,B,B,B,O,_,_,_],[_,_,O,B,O,B,B,B,B,B,B,O,B,O,_,_]];
+const HBA=[[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],[_,O,B,B,B,B,O,O,O,O,O,B,B,B,O,_],[_,O,B,B,B,B,O,O,O,O,O,B,B,B,O,_],[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_]];
+const FN=[[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],[_,O,B,B,E,E,B,B,B,B,E,E,B,B,O,_],[_,O,B,B,E,E,B,B,B,B,E,E,B,B,O,_]];
+const FH=[[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],[_,O,B,B,E,E,B,B,B,B,E,E,B,B,O,_]];
+const FA=[[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],[_,O,B,O,E,E,B,B,B,B,E,E,O,B,O,_],[_,O,B,B,E,E,B,B,B,B,E,E,B,B,O,_]];
+const HN=[...HT,...FN,...HB],HH=[...HT,...FH,...HB2],HA=[...HTA,...FA,...HBA];
+const TT=[[_,O,B,O,B,B,O,B,B,O,B,B,O,B,O,_]];
+const TN=[[_,O,B,B,O,_,O,B,B,O,_,O,B,B,O,_],[_,_,O,O,_,_,_,O,O,_,_,_,O,O,_,_],[_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_]];
+const TS=[[_,O,B,O,_,_,O,B,O,_,_,O,B,O,_,_],[_,O,O,_,_,_,_,O,O,_,_,_,O,O,_,_],[_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_]];
+const TW=[[_,_,O,B,O,_,_,O,B,O,_,_,O,B,O,_],[_,_,_,O,O,_,_,_,O,O,_,_,_,O,O,_],[_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_]];
+const WA=[[_,O,B,B,O,_,O,B,B,O,_,O,B,B,O,_],[_,_,O,B,O,_,O,B,O,_,_,_,O,B,O,_],[_,_,_,O,O,_,O,O,_,_,_,_,_,O,O,_],[_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_]];
+const WB=[[_,O,B,B,O,_,O,B,B,O,_,O,B,B,O,_],[_,O,B,O,_,_,_,O,B,O,_,O,B,O,_,_],[_,O,O,_,_,_,_,_,O,O,_,O,O,_,_,_],[_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_]];
+const BC=[[_,O,B,B,O,_,O,B,B,O,_,O,B,B,O,_],[_,O,B,O,_,_,O,B,B,O,_,_,O,B,O,_],[_,O,O,_,_,_,_,O,O,_,_,_,_,O,O,_],[_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_]];
+const BT=[[_,O,B,B,O,_,O,B,B,O,_,O,B,B,O,_],[_,_,O,O,_,_,_,O,O,_,_,_,O,O,_,_],[_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],[_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_]];
+const STD=[...TT,...TN];
+const ANIM={
+  idle:[{h:HN,t:[...TT,...TN],y:0},{h:HN,t:[...TT,...TS],y:0},{h:HN,t:[...TT,...TN],y:0},{h:HN,t:[...TT,...TW],y:0}],
+  running:[{h:HH,t:WA,y:1},{h:HH,t:STD,y:0},{h:HH,t:WA,y:1},{h:HH,t:WB,y:0}],
+  done:[{h:HH,t:BC,y:2},{h:HH,t:STD,y:1},{h:HH,t:BT,y:0},{h:HH,t:STD,y:1}],
+  rejected:[{h:HA,t:STD,y:0},{h:HA,t:STD,y:0},{h:HA,t:STD,y:1},{h:HA,t:STD,y:2},{h:HA,t:STD,y:2},{h:HA,t:STD,y:1}],
 };
-
-function drawOctopus(canvas, col, state){
-  const c=canvas.getContext('2d');
-  const sprite=SPRITES[state==='running'?'running':state==='done'?'done':'idle'];
-  const pw=Math.floor(canvas.width/16);
-  c.clearRect(0,0,canvas.width,canvas.height);
-  sprite.forEach((row,ry)=>{
-    row.forEach((cell,cx)=>{
-      if(!cell) return;
-      c.fillStyle = cell===B ? col
-                  : cell===O ? '#000000'
-                  : cell===E ? '#111111' : 'transparent';
-      c.fillRect(cx*pw, ry*pw, pw, pw);
-    });
-  });
+const ANIM_MS={idle:420,running:180,done:260,rejected:480};
+const agSt={};
+AG.forEach(ag=>{agSt[ag.id]={frame:0,interval:null,canvas:null,state:'idle',col:ag.col};});
+function _drawFrame(id){
+  const a=agSt[id];if(!a.canvas)return;
+  const ctx=a.canvas.getContext('2d');
+  const frames=ANIM[a.state]||ANIM.idle;
+  const f=frames[a.frame%frames.length];
+  ctx.clearRect(0,0,a.canvas.width,a.canvas.height);
+  [...f.h,...f.t].forEach((row,ry)=>{row.forEach((cell,cx)=>{
+    if(!cell)return;
+    ctx.fillStyle=(cell===E||cell===O)?'#000':a.col;
+    ctx.fillRect(cx*PX,(ry+(f.y||0))*PX,PX,PX);
+  });});
+}
+function _startAnim(id,state){
+  const a=agSt[id];
+  if(a.interval){clearInterval(a.interval);a.interval=null;}
+  a.state=state;a.frame=0;_drawFrame(id);
+  a.interval=setInterval(()=>{a.frame=(a.frame+1)%((ANIM[a.state]||ANIM.idle).length);_drawFrame(id);},ANIM_MS[state]||420);
+}
+function drawOctopus(canvas,col,state,agId){
+  const a=agSt[agId];
+  const isNew=!a.canvas||a.canvas!==canvas;
+  a.canvas=canvas;a.col=col;
+  if(isNew||a.state!==state)_startAnim(agId,state);
 }
 
 // ── drag to pan viewBox ────────────────────────────────────────────────────────
@@ -646,13 +621,38 @@ function handleMsg(m){
     else if(status==='dialogue'&&m.dialogue){
       addDialogue(m.dialogue);
     }
-    const fm=msg&&msg.match(/(\d+) files/);
+
+    // live quality score from Reviewer events
+    if(agent==='Reviewer'&&msg){
+      const qm=msg.match(/score (\d+)\/100/);
+      if(qm){
+        document.getElementById('hsQ').textContent=qm[1]+'/100';
+        document.getElementById('hsQ').style.color=parseInt(qm[1])>=85?'var(--green)':parseInt(qm[1])>=70?'var(--yellow)':'var(--red)';
+      }
+    }
+
+    // live file count
+    const fm=msg&&msg.match(/(\d+) files?/);
     if(fm){fileCnt=parseInt(fm[1]);updStats()}
+
+    // final quality score from System done event
     if(status==='done'&&agent==='System'){
-      document.getElementById('hsQ').textContent='100';
+      if(m.quality_score){
+        const qs=m.quality_score;
+        document.getElementById('hsQ').textContent=qs+'/100';
+        document.getElementById('hsQ').style.color=qs>=85?'var(--green)':qs>=70?'var(--yellow)':'var(--red)';
+      } else {
+        document.getElementById('hsQ').textContent='100';
+      }
       setStatus('DONE');stopClock();isRunning=false;
       document.getElementById('runBtn').disabled=false;
     }
+
+    // complete event (project ready)
+    if(status==='complete'&&agent==='System'){
+      document.getElementById('hsQ').textContent='✓';
+    }
+
     if(m.benchmark) showBench(m.benchmark);
   }
 }
@@ -676,9 +676,16 @@ function addDialogue(d){
 }
 
 // ── node state ─────────────────────────────────────────────────────────────────
+let _nLock={};
 function setN(id,s){
+  if(nstate[id]==='rejected'&&s==='running'&&!_nLock[id]){
+    _nLock[id]=true;
+    setTimeout(()=>{nstate[id]=s;_nLock[id]=false;_startAnim(id,'running');},2000);
+    return;
+  }
   nstate[id]=s;
   if(s==='done'){doneCnt++;updStats()}
+  _startAnim(id,s==='done'?'done':s==='running'?'running':s==='rejected'?'rejected':'idle');
 }
 
 function updStats(){
