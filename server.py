@@ -89,9 +89,10 @@ async def run_society(session_id: str, task: str):
 
     await emit(session_id, "System", "running", f"starting agent society for: {task[:60]}")
 
-    def on_event(agent: str, status: str, msg: str):
+    def on_event(agent: str, status: str, msg: str, extra: dict = {}):
         elapsed = round(time.time() - t_start, 1)
-        sync_emit(session_id, agent, status, msg, {"elapsed": elapsed})
+        ev_extra = {"elapsed": elapsed, **extra}
+        sync_emit(session_id, agent, status, msg, ev_extra)
 
     def on_dialogue(from_agent, to_agent, msg_type, content):
         elapsed = round(time.time() - t_start, 1)

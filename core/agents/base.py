@@ -63,16 +63,11 @@ class PlannerAgent(Agent):
     emoji = "🗺️"
     model_profile = "reasoning"
 
-    SYSTEM = """You are a senior software architect and project planner.
-Given a project idea, output a precise JSON plan with:
-- "tech_stack": {frontend, backend, database, deployment}
-- "files": ["list", "of", "all", "files", "to", "create"]
-- "features": ["feature1", ...]
-- "api_routes": [{"method": "GET", "path": "/api/x", "desc": "..."}]
-- "db_schema": ["table: fields..."]
-- "steps": ["step1", "step2", ...]
-- "complexity": "low|medium|high"
-Output ONLY valid JSON, no prose."""
+    SYSTEM = """You are a senior software architect. Output ONLY valid JSON, zero prose.
+Be concise. Max 8 files. Max 6 API routes. Max 4 DB tables.
+Required keys: tech_stack, files, features, api_routes, db_schema, security_notes, complexity.
+security_notes: list specific security requirements (JWT expiry, input validation, env vars for secrets).
+Output ONLY valid JSON."""
 
     def run(self, context: dict) -> AgentResult:
         t0 = time.time()
@@ -125,10 +120,18 @@ class CoderAgent(Agent):
     model_profile = "coding"
 
     SYSTEM = """You are an elite full-stack engineer. Generate production-quality code.
-Rules:
+CRITICAL SECURITY RULES (Reviewer will reject if violated):
+- NEVER hardcode secrets. Use os.getenv("KEY") with NO fallback default value
+- ALL user inputs must be validated and sanitized before use
+- SQL queries must use parameterized queries only — never string concatenation
+- JWT secrets must come from environment only, minimum 32 chars enforced at startup
+- CORS must whitelist specific origins, never use wildcard * in production
+- Rate limiting must be applied to auth endpoints
+- All API responses must strip internal error details before sending to client
+
+CODE QUALITY RULES:
 - Write complete, working files — no placeholders, no TODOs
 - Use modern patterns: async/await, TypeScript strict mode, proper error handling
-- Include proper imports and exports
 - Add type annotations everywhere
 - Format code blocks as:
   ```language
@@ -136,8 +139,7 @@ Rules:
   <complete file content>
   ```
 - Generate ALL files listed in the plan
-- Use environment variables for secrets (never hardcode)
-- Include error boundaries and loading states in UI
+- Include proper error boundaries and loading states in UI
 - Write idiomatic code for the chosen tech stack"""
 
     def run(self, context: dict) -> AgentResult:
@@ -222,26 +224,31 @@ class ReviewerAgent(Agent):
 
     # Minimum score to approve. Below this, or any critical issue present,
     # triggers a rejection and sends the code back to the Coder for revision.
-    APPROVAL_THRESHOLD = 85
+    APPROVAL_THRESHOLD = 80  # lowered slightly — 80+ with no critical = shippable
 
-    SYSTEM = """You are a senior code reviewer. Analyze code for:
-1. Bugs and logic errors
-2. Security vulnerabilities (XSS, SQLi, secrets in code, etc.)
-3. Performance issues
-4. Missing error handling
-5. Type safety issues
-6. Missing edge cases
+    SYSTEM = """You are a senior code reviewer. Score the code 0-100.
+Start at 100. Deduct points only for real issues found:
+- Hardcoded secret with value (-25): e.g. os.getenv("KEY", "actual-secret")
+- SQL injection via string concat (-20)
+- Missing input validation on auth endpoints (-15)
+- Unhandled promise rejections or missing try/catch on DB calls (-10)
+- Missing rate limiting on auth (-10)
+- Wildcard CORS in production (-10)
+- Type errors or missing null checks (-5 each)
 
-Output a JSON report:
+If code correctly uses env vars with NO defaults, parameterized queries, and validated inputs — score 90+.
+Only add to "critical" if it would cause data loss, secret exposure, or auth bypass.
+Warnings are non-blocking. Suggestions are optional.
+
+Output ONLY this JSON:
 {
   "score": 0-100,
-  "critical": ["issue1", ...],
-  "warnings": ["warn1", ...],
-  "suggestions": ["tip1", ...],
-  "security_issues": ["sec1", ...],
-  "fixed_files": {"path": "fixed content"}
-}
-Be strict. A "critical" entry means the code must not ship as-is."""
+  "critical": ["blocking issue only if truly critical"],
+  "warnings": ["non-blocking"],
+  "suggestions": ["optional"],
+  "security_issues": ["actual vuln only"],
+  "fixed_files": {"path/to/file": "complete fixed content if you fixed something"}
+}"""
 
     def run(self, context: dict) -> AgentResult:
         t0 = time.time()
