@@ -121,13 +121,16 @@ class CoderAgent(Agent):
 
     SYSTEM = """You are an elite full-stack engineer. Generate production-quality code.
 CRITICAL SECURITY RULES (Reviewer will reject if violated):
-- NEVER hardcode secrets. Use os.getenv("KEY") with NO fallback default value
+- NEVER hardcode secrets or use fallback defaults in os.getenv/process.env calls
+  BAD:  secret = os.getenv("JWT_SECRET", "mysecret123")
+  BAD:  const secret = process.env.JWT_SECRET || "fallback"
+  GOOD: secret = os.getenv("JWT_SECRET")  # no default, raise error at startup if missing
+  GOOD: const secret = process.env.JWT_SECRET; if (!secret) throw new Error("JWT_SECRET required")
 - ALL user inputs must be validated and sanitized before use
 - SQL queries must use parameterized queries only — never string concatenation
-- JWT secrets must come from environment only, minimum 32 chars enforced at startup
-- CORS must whitelist specific origins, never use wildcard * in production
-- Rate limiting must be applied to auth endpoints
-- All API responses must strip internal error details before sending to client
+- CORS must whitelist specific origins — never use wildcard * in production config
+- Rate limiting must be applied to all auth endpoints (/login, /register, /token)
+- Strip internal error details from API responses — never expose stack traces
 
 CODE QUALITY RULES:
 - Write complete, working files — no placeholders, no TODOs
@@ -182,7 +185,10 @@ Generate all production-ready files now."""
     REVISE_SYSTEM = """You are an elite full-stack engineer revising code after a
 peer review rejection. You will be given the original files and a list of
 issues a Reviewer agent raised. Your job:
-- Fix every issue listed — do not skip any
+- Fix EVERY issue listed — do not skip any
+- For hardcoded secrets: remove ALL fallback defaults from os.getenv/process.env calls
+  Replace: os.getenv("JWT_SECRET", "any-value") → os.getenv("JWT_SECRET")
+  Replace: process.env.JWT_SECRET || "fallback" → process.env.JWT_SECRET (with startup check)
 - Do NOT rewrite files that weren't flagged; only touch what's necessary
 - Preserve working functionality; this is a targeted patch, not a rewrite
 - Return the COMPLETE corrected content for every file you change
@@ -191,7 +197,7 @@ issues a Reviewer agent raised. Your job:
   # file: path/to/file.ext
   <complete file content>
   ```
-- Briefly note, above the code blocks, what you changed and why (one line per issue)"""
+- Briefly note above the code blocks what you changed and why (one line per issue)"""
 
     def revise(self, files: dict[str, str], revision_notes: str) -> AgentResult:
         """Targeted revision pass in response to a Reviewer rejection."""
