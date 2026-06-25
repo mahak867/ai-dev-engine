@@ -44,16 +44,52 @@ class Agent:
                 {"role": "user",   "content": user}]
 
     def _parse_files(self, text: str) -> dict[str, str]:
-        """Extract ```path/to/file.ext ... ``` code blocks."""
+        """Extract code blocks from LLM output — handles all Qwen3.7 output patterns."""
         files = {}
-        pattern = r"```(?:\w+)?\s*\n?(?:#\s*)?(?:file:\s*)?([\w./\-]+\.\w+)\n(.*?)```"
-        for m in re.finditer(pattern, text, re.DOTALL):
+
+        # Pattern 1: ```lang\n# file: path or file: path on fence line
+        p1 = r"```(?:\w+)?\s*\n?(?:#\s*)?(?:file:\s*)?([\w./\-]+\.\w+)\n(.*?)```"
+        for m in re.finditer(p1, text, re.DOTALL):
+            path = m.group(1).strip()
+            content = m.group(2).rstrip()
+            if path and '.' in path:
+                files[path] = content
+
+        if files:
+            return files
+
+        # Pattern 2: ```lang\n// src/file.ext (Qwen3.7 default — path as first comment line)
+        p2 = r"```(?:\w+)?\s*\n(?://|#)\s*([\w./\-]+\.\w+)\s*\n(.*?)```"
+        for m in re.finditer(p2, text, re.DOTALL):
+            path = m.group(1).strip()
+            content = m.group(2).rstrip()
+            if path and '.' in path:
+                files[path] = content
+
+        if files:
+            return files
+
+        # Pattern 3: ```lang\n// path\n (path in first line even without file: prefix)
+        p3 = r"```(\w+)\s*\n(.*?)```"
+        for m in re.finditer(p3, text, re.DOTALL):
+            lang = m.group(1)
+            body = m.group(2)
+            first_line = body.split('\n')[0].strip()
+            # check if first line looks like a file path
+            path_match = re.match(r'^(?://|#|/\*|<!--)?\s*([\w./\-]+\.(?:js|ts|py|go|rs|tsx|jsx|json|yaml|yml|env|md|sh|sql|html|css))\s*$', first_line)
+            if path_match:
+                path = path_match.group(1).strip()
+                content = '\n'.join(body.split('\n')[1:]).rstrip()
+                files[path] = content
+
+        if files:
+            return files
+
+        # Pattern 4: ### filename.ext header fallback
+        p4 = r"###\s+([\w./\-]+\.\w+)\s*\n```[^\n]*\n(.*?)```"
+        for m in re.finditer(p4, text, re.DOTALL):
             files[m.group(1).strip()] = m.group(2).rstrip()
-        # fallback: look for ### filename headers
-        if not files:
-            pattern2 = r"###\s+([\w./\-]+\.\w+)\s*\n```[^\n]*\n(.*?)```"
-            for m in re.finditer(pattern2, text, re.DOTALL):
-                files[m.group(1).strip()] = m.group(2).rstrip()
+
         return files
 
 
