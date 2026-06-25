@@ -153,15 +153,15 @@ async def run_benchmark_task(session_id: str, task: str):
             # society
             sync_emit(session_id, "System", "running", "running agent society...")
 
-            def on_event(agent, status, msg):
+            def on_event(agent, status, msg, extra={}):
                 elapsed = round(time.time() - t_start, 1)
-                sync_emit(session_id, agent, status, msg, {"elapsed": elapsed})
+                sync_emit(session_id, agent, status, msg, {"elapsed": elapsed, **extra})
 
             from core.orchestrator import Orchestrator
             events = []
-            def on_event2(agent, status, msg):
+            def on_event2(agent, status, msg, extra={}):
                 elapsed = round(time.time() - t_start, 1)
-                sync_emit(session_id, agent, status, msg, {"elapsed": elapsed})
+                sync_emit(session_id, agent, status, msg, {"elapsed": elapsed, **extra})
                 events.append({"agent": agent, "status": status, "msg": msg})
 
             orch = Orchestrator(model="auto", on_event=on_event2)

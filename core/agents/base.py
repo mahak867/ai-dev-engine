@@ -129,14 +129,16 @@ class ArchitectAgent(Agent):
     emoji = "🏛️"
     model_profile = "reasoning"
 
-    SYSTEM = """You are an elite software architect. Given a project plan,
-produce detailed architecture decisions:
-- Component diagram in ASCII art
-- Data flow description
-- Security considerations
-- Scalability notes
-- Potential bottlenecks and solutions
-Be concise and technical. Focus on decisions that matter."""
+    SYSTEM = """You are an elite software architect. Given a project plan, output:
+1. Component diagram (ASCII, max 15 lines)
+2. Key architecture decisions (max 5 bullet points)
+3. Security implementation notes — be specific:
+   - Exact middleware order (rate limiter before auth before route handler)
+   - JWT validation approach (verify signature + expiry on every request)
+   - Environment variable names to use (e.g. JWT_SECRET, DATABASE_URL)
+   - Input validation library to use (e.g. joi, zod, pydantic)
+4. File structure confirming what Coder should create
+Be concise. Every decision must be immediately actionable by the Coder."""
 
     def run(self, context: dict) -> AgentResult:
         t0 = time.time()
@@ -358,18 +360,18 @@ class DebuggerAgent(Agent):
     emoji = "🐛"
     model_profile = "coding"
 
-    SYSTEM = """You are an expert debugger. Given code and an error:
-1. Identify root cause precisely
-2. Explain why it happens
-3. Provide the COMPLETE fixed file (not just the diff)
-4. Add defensive code to prevent similar issues
-
-Output:
-```
-# file: path/to/fixed_file.ext
+    SYSTEM = """You are an expert debugger. Fix ALL errors in the given code.
+Output fixed files in this exact format:
+```language
+# file: path/to/file.ext
 <complete fixed content>
 ```
-Then explain the fix."""
+Rules:
+- Return the COMPLETE file content for every file you fix
+- Fix import errors, undefined variables, missing awaits, type mismatches
+- Add null checks for values that could be undefined
+- Never add hardcoded fallback values for secrets or config
+- After all code blocks, write one line explaining what you fixed"""
 
     def run(self, context: dict) -> AgentResult:
         t0 = time.time()
@@ -397,15 +399,18 @@ class SelfHealerAgent(Agent):
     emoji = "🔧"
     model_profile = "coding"
 
-    SYSTEM = """You are an autonomous self-healing system. You receive code that failed
-(import errors, syntax errors, runtime errors) and must:
-1. Fix ALL issues automatically
-2. Return ONLY the complete fixed files, no explanation needed
-3. Ensure all imports exist and are correct
-4. Fix type errors
-5. Add missing dependencies to package.json or requirements.txt
-
-Output only fixed files as code blocks with file paths."""
+    SYSTEM = """You are an autonomous self-healing system. Fix ALL issues in the code.
+Output fixed files in this exact format:
+```language
+# file: path/to/file.ext
+<complete fixed content>
+```
+Rules:
+- Return the COMPLETE file content, not just the changed lines
+- Fix all import errors, syntax errors, type errors
+- Add missing dependencies to package.json or requirements.txt
+- Never use fallback defaults for secrets: os.getenv("KEY") not os.getenv("KEY","default")
+- Output ONLY code blocks, no prose explanation"""
 
     MAX_RETRIES = 3
 
@@ -434,19 +439,39 @@ class DocWriterAgent(Agent):
     emoji = "📝"
     model_profile = "auto"
 
-    SYSTEM = """Write a professional README.md for this project. Include:
-- Project title and description
-- Features list (with emoji bullets)
-- Tech stack
-- Prerequisites
-- Installation steps (numbered, copy-pasteable)
-- Environment variables table
-- API endpoints table (if applicable)
-- Deployment instructions
-- Contributing guide
-- License
+    SYSTEM = """Write a professional README.md for this project.
 
-Make it look polished and professional."""
+Structure (use exactly these sections in order):
+# <Project Name>
+> One-line description
+
+## What It Does
+2-3 sentences on the core value proposition.
+
+## Features
+- ✅ Feature 1
+- ✅ Feature 2 (max 6 features)
+
+## Tech Stack
+| Layer | Technology |
+|---|---|
+| Backend | ... |
+
+## Quick Start
+```bash
+# numbered steps to run locally
+```
+
+## API Reference
+Key endpoints only (max 6 rows table).
+
+## Architecture
+Brief description of how components connect.
+
+---
+*Built with Qwen Cloud — Global AI Hackathon 2026, Track 3: Agent Society*
+
+Rules: Be concise. Use real values from the project, not placeholders. No TODO sections."""
 
     def run(self, context: dict) -> AgentResult:
         t0   = time.time()
@@ -456,7 +481,7 @@ Make it look polished and professional."""
             f"Plan:\n{context.get('plan','')}"
         )
         try:
-            readme = self.llm.complete(msgs, max_tokens=3000)
+            readme = self.llm.complete(msgs, max_tokens=4096)
             return AgentResult(
                 agent=self.name, output=readme,
                 files={"README.md": readme}, duration=time.time()-t0

@@ -246,6 +246,7 @@ class LLMProvider:
     # ── OpenAI-compat helper ───────────────────────────────────────────────────
     def _openai_compat(self, url, key, model_id, messages, max_tokens, stream,
                        extra_headers: dict | None = None):
+        import time as _time
         headers = {"Authorization": f"Bearer {key}"}
         if extra_headers:
             headers.update(extra_headers)
@@ -253,19 +254,35 @@ class LLMProvider:
             "model": model_id, "messages": messages,
             "max_tokens": max_tokens, "temperature": self.temperature, "stream": stream,
         }
-        r = self._session.post(url, json=payload, headers=headers, stream=stream, timeout=120)
-        r.raise_for_status()
-        if not stream:
-            return r.json()["choices"][0]["message"]["content"]
-        def _gen():
-            for line in r.iter_lines():
-                if line and line.startswith(b"data: "):
-                    data = line[6:]
-                    if data == b"[DONE]":
-                        break
-                    try:
-                        if token := json.loads(data)["choices"][0].get("delta", {}).get("content", ""):
-                            yield token
-                    except Exception:
-                        pass
-        return _gen()
+        last_err = None
+        for attempt in range(3):
+            try:
+                r = self._session.post(url, json=payload, headers=headers,
+                                       stream=stream, timeout=180)
+                if r.status_code == 429 or r.status_code >= 500:
+                    wait = (2 ** attempt) * 4  # 4s, 8s, 16s
+                    log.warning(f"HTTP {r.status_code} from {model_id}, retry in {wait}s ({attempt+1}/3)")
+                    _time.sleep(wait)
+                    last_err = f"HTTP {r.status_code}"
+                    continue
+                r.raise_for_status()
+                if not stream:
+                    return r.json()["choices"][0]["message"]["content"]
+                def _gen():
+                    for line in r.iter_lines():
+                        if line and line.startswith(b"data: "):
+                            data = line[6:]
+                            if data == b"[DONE]":
+                                break
+                            try:
+                                if token := json.loads(data)["choices"][0].get("delta", {}).get("content", ""):
+                                    yield token
+                            except Exception:
+                                pass
+                return _gen()
+            except Exception as e:
+                last_err = str(e)
+                if attempt < 2:
+                    _time.sleep(4 * (attempt + 1))
+                continue
+        raise RuntimeError(f"{model_id} failed after 3 attempts: {last_err}")
