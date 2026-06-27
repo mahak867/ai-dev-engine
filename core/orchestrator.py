@@ -124,7 +124,13 @@ class Orchestrator:
             for round_num in range(1, MAX_REVIEW_ROUNDS + 1):
                 self._emit("Reviewer", "running",
                     f"Reviewing code quality & security (round {round_num})...")
-                code_dump = "\n\n".join(f"// {p}\n{c}" for p, c in list(all_files.items())[:5])
+                # Review ALL files, prioritising code files first
+                priority_exts = ('.py','.ts','.js','.go','.rs','.tsx','.jsx')
+                sorted_files = sorted(all_files.items(),
+                    key=lambda x: (0 if x[0].endswith(priority_exts) else 1, x[0]))
+                code_dump = "\n\n".join(
+                    f"// {fp}\n{c}" for fp, c in sorted_files
+                )[:12000]  # cap at 12K chars so Reviewer context stays fast
                 review_result = self.reviewer.run({"code": code_dump})
 
                 if review_result.verdict == "rejected" and round_num < MAX_REVIEW_ROUNDS:
