@@ -20,7 +20,18 @@ log = logging.getLogger("apex.server")
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(title="APEX Society", version="1.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# Restrict CORS to known origins — wildcard is a security issue
+ALLOWED_ORIGINS = [
+    "http://47.84.135.232:8000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
+)
 
 # ── connection manager ─────────────────────────────────────────────────────────
 class ConnectionManager:
@@ -50,6 +61,28 @@ manager = ConnectionManager()
 
 # ── session state ──────────────────────────────────────────────────────────────
 sessions: dict[str, dict] = {}
+
+# ── session cleanup — prevent memory leak ─────────────────────────────────────
+import asyncio as _asyncio
+
+async def _cleanup_sessions():
+    """Delete sessions older than 2 hours to prevent OOM."""
+    while True:
+        await _asyncio.sleep(1800)  # run every 30 min
+        cutoff = time.time() - 7200  # 2 hours
+        dead = [sid for sid, s in list(sessions.items())
+                if s.get("created", time.time()) < cutoff]
+        for sid in dead:
+            sessions.pop(sid, None)
+            agent_dialogues.pop(sid, None)
+        if dead:
+            log.info(f"Cleaned {len(dead)} expired sessions")
+
+@app.on_event("startup")
+async def startup():
+    global _loop
+    _loop = _asyncio.get_event_loop()
+    _asyncio.create_task(_cleanup_sessions())
 
 # ── event emitter (called by orchestrator agents) ──────────────────────────────
 async def emit(session_id: str, agent: str, status: str, msg: str, extra: dict = {}):
@@ -127,7 +160,10 @@ async def run_society(session_id: str, task: str):
             sessions[session_id]["status"] = "error"
 
     global _loop
-    _loop = asyncio.get_event_loop()
+    try:
+        _loop = asyncio.get_running_loop()
+    except RuntimeError:
+        _loop = asyncio.new_event_loop()
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()
 
@@ -209,7 +245,10 @@ async def run_benchmark_task(session_id: str, task: str):
             sync_emit(session_id, "System", "error", f"benchmark error: {str(e)[:100]}")
 
     global _loop
-    _loop = asyncio.get_event_loop()
+    try:
+        _loop = asyncio.get_running_loop()
+    except RuntimeError:
+        _loop = asyncio.new_event_loop()
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()
 
@@ -225,7 +264,13 @@ async def websocket_endpoint(ws: WebSocket):
 
             if action == "run":
                 session_id = str(uuid.uuid4())[:12]
-                task = msg.get("task", "build a REST API with auth and CRUD")
+                task = msg.get("task", "build a REST API with auth and CRUD").strip()
+                # validate and cap task length to prevent token abuse
+                if not task:
+                    await ws.send_text(json.dumps({"type": "error", "msg": "Task cannot be empty"}))
+                    continue
+                if len(task) > 500:
+                    task = task[:500]
                 sessions[session_id] = {
                     "id": session_id, "task": task,
                     "status": "starting", "events": [],
