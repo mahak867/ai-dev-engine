@@ -10,7 +10,7 @@
 
 ## Demo Video
 
-> 📹 **[REPLACE_WITH_YOUTUBE_URL]**
+> 📹 **[APEX Society Demo — 7-Agent Qwen AI System](https://youtu.be/XBzURya6XAk)**
 
 ---
 
