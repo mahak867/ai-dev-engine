@@ -103,11 +103,14 @@ class PlannerAgent(Agent):
 Be concise. Max 8 files. Max 6 API routes. Max 4 DB tables.
 Required keys: tech_stack, files, features, api_routes, db_schema, security_notes, complexity.
 security_notes: list specific security requirements (JWT expiry, input validation, env vars for secrets).
+If memory context from past similar projects is provided, use it to make better decisions and avoid past mistakes.
 Output ONLY valid JSON."""
 
     def run(self, context: dict) -> AgentResult:
         t0 = time.time()
-        prompt = f"Project: {context['request']}\nName: {context.get('name','app')}"
+        memory_ctx = context.get("memory_context", "")
+        base_prompt = f"Project: {context['request']}\nName: {context.get('name','app')}"
+        prompt = f"{memory_ctx}\n\n---\n\n{base_prompt}" if memory_ctx else base_prompt
         msgs = self._messages(self.SYSTEM, prompt)
         try:
             raw = self.llm.complete(msgs, max_tokens=2048)

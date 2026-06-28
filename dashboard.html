@@ -116,6 +116,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .cdone{color:var(--green)}.crun{color:var(--yellow)}.cerr{color:var(--red)}.crej{color:var(--red);font-weight:600}.cdlg{color:#bb88ff}
 .aPlanner{color:var(--yellow)}.aArchitect{color:var(--cyan)}.aCoder{color:#bb88ff}
 .aReviewer{color:var(--blue)}.aSelfHealer{color:var(--green)}.aDebugger{color:var(--red)}
+.aExecutor{color:#ff9900}.aMemory{color:#ff66cc}
 .aDocWriter{color:var(--sub)}.aSystem{color:var(--orange)}
 
 /* bench/sec */
@@ -160,7 +161,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     <span class="hdr-sub">QWEN CLOUD · 7-AGENT SYSTEM</span>
   </div>
   <div class="hdr-stats">
-    <div class="hstat"><span class="hstat-l">AGENTS</span><span class="hstat-v" id="hsA">0/7</span></div>
+    <div class="hstat"><span class="hstat-l">AGENTS</span><span class="hstat-v" id="hsA">0/9</span></div>
     <div class="hstat"><span class="hstat-l">FILES</span><span class="hstat-v" id="hsF">0</span></div>
     <div class="hstat"><span class="hstat-l">QUALITY</span><span class="hstat-v" id="hsQ">—</span></div>
     <div class="hstat"><span class="hstat-l">CVEs</span><span class="hstat-v" id="hsC" style="color:var(--red)">0</span></div>
@@ -171,6 +172,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <button class="nav-btn on" onclick="setTab('agents',this)"><span class="nav-key">[1]</span> AGENTS</button>
   <button class="nav-btn" onclick="setTab('bench',this)"><span class="nav-key">[2]</span> BENCHMARK</button>
   <button class="nav-btn" onclick="setTab('security',this)"><span class="nav-key">[3]</span> SECURITY</button>
+  <button class="nav-btn" onclick="setTab('memory',this)"><span class="nav-key">[4]</span> MEMORY</button>
   <div class="nav-spacer"></div>
   <div class="ws-pill"><div class="ws-dot" id="wsd"></div><span id="wst">offline</span></div>
 </div>
@@ -202,7 +204,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 <div class="sbar">
   <div class="si"><span class="sl">STATUS</span><span class="sv" id="sbS">IDLE</span></div>
   <div class="si"><span class="sl">SESSION</span><span class="sv" id="sbSess">—</span></div>
-  <div class="si"><span class="sl">AGENTS</span><span class="sv" id="sbA">0/7</span></div>
+  <div class="si"><span class="sl">AGENTS</span><span class="sv" id="sbA">0/9</span></div>
   <div class="si"><span class="sl">FILES</span><span class="sv" id="sbF">0</span></div>
   <div style="flex:1"></div>
   <span style="font-size:9px;color:var(--dim)">APEX SOCIETY v1.0 · QWEN CLOUD · press 1-3 to navigate</span>
@@ -224,12 +226,15 @@ const AG = [
   {id:'SelfHealer',col:'#00ff88', lbl:'healer',    x:-220, y:110},
   {id:'Debugger',  col:'#ff4444', lbl:'debugger',  x:-220, y:-100},
   {id:'DocWriter', col:'#888888', lbl:'docs',      x:0,    y:0},
+  {id:'Executor',  col:'#ff9900', lbl:'executor',  x:0,    y:130},
+  {id:'Memory',    col:'#ff66cc', lbl:'memory',    x:-120, y:-220},
 ];
 const EDGES=[
   ['Planner','Architect'],['Planner','DocWriter'],['Planner','Coder'],
   ['Architect','Coder'],['Coder','Reviewer'],
   ['Reviewer','SelfHealer'],['SelfHealer','Debugger'],
-  ['Debugger','Coder'],['DocWriter','Reviewer'],
+  ['Debugger','Executor'],['Executor','DocWriter'],
+  ['DocWriter','Reviewer'],['Memory','Planner'],
 ];
 
 // ── force simulation (simple) ─────────────────────────────────────────────────
@@ -689,8 +694,8 @@ function setN(id,s){
 }
 
 function updStats(){
-  document.getElementById('hsA').textContent=`${doneCnt}/7`;
-  document.getElementById('sbA').textContent=`${doneCnt}/7`;
+  document.getElementById('hsA').textContent=`${doneCnt}/9`;
+  document.getElementById('sbA').textContent=`${doneCnt}/9`;
   document.getElementById('hsF').textContent=fileCnt;
   document.getElementById('sbF').textContent=fileCnt;
 }
@@ -739,6 +744,7 @@ async function doRun(){
       {a:'Reviewer',  d:3800,f:0,m:'reviewing security & quality'},
       {a:'SelfHealer',d:2000,f:2,m:'self-healing pass'},
       {a:'Debugger',  d:1400,f:0,m:'checking runtime errors'},
+      {a:'Executor',  d:1200,f:0,m:'validating syntax of generated files'},
       {a:'DocWriter', d:2500,f:1,m:'writing docs'},
     ];
     for(const step of pipe){
@@ -810,6 +816,33 @@ function showBench(d){
     </div>`;
 }
 
+function showMemory(){
+  document.getElementById('dynT').textContent='MEMORY & LEARNING';
+  fetch('/api/memory/stats').then(r=>r.json()).then(d=>{
+    const projects = d.projects||[];
+    const stats = d.stats||{};
+    const rows = projects.slice(0,8).map(p=>`
+      <div class="sc sc-good" style="margin-bottom:6px">
+        <div class="sc-t">${p.name} <span style="color:var(--dim);font-size:8px">${new Date(p.created*1000).toLocaleDateString()}</span></div>
+        <div class="sc-d">${p.request}</div>
+        ${p.quality_score?`<div class="sc-d" style="color:var(--green)">Quality: ${p.quality_score}/100 · ${p.file_count} files</div>`:''}
+        ${p.lessons_learned&&p.lessons_learned.length?`<div class="sc-d" style="color:#ffcc44;font-size:8px">💡 ${p.lessons_learned[0]}</div>`:''}
+      </div>`).join('');
+    document.getElementById('dynB').innerHTML=`
+      <div style="padding:8px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+          <div class="sc sc-good"><div class="sc-t">${stats.total_runs||0}</div><div class="sc-d">Total Runs</div></div>
+          <div class="sc sc-good"><div class="sc-t">${stats.avg_quality||0}/100</div><div class="sc-d">Avg Quality</div></div>
+          <div class="sc sc-good"><div class="sc-t">${stats.total_files||0}</div><div class="sc-d">Files Generated</div></div>
+        </div>
+        <div style="color:var(--sub);font-size:9px;margin-bottom:8px">PAST PROJECTS — agents learn from these</div>
+        ${rows||'<div class="empty">No past runs yet. Run a task to start building memory.</div>'}
+      </div>`;
+  }).catch(()=>{
+    document.getElementById('dynB').innerHTML='<div class="empty">Memory API unavailable</div>';
+  });
+}
+
 function showSec(){
   setTab('security',document.querySelectorAll('.nav-btn')[2]);
   document.getElementById('dynT').textContent='SECURITY';
@@ -839,6 +872,7 @@ function setTab(tab, el){
   if(el) el.classList.add('on');
   if(tab==='bench') showBench({single:{time:69.3,files:5,score:91,vulns:1},society:{time:182.9,files:11,score:100,vulns:0}});
   else if(tab==='security') showSec();
+  else if(tab==='memory') showMemory();
 }
 
 document.addEventListener('keydown',e=>{
@@ -856,11 +890,11 @@ function doReset(resetN=true){
   document.getElementById('clk').textContent='00:00';
   document.getElementById('lp').innerHTML='<div class="empty">waiting...</div>';
   document.getElementById('lc').textContent='0 events';
-  document.getElementById('hsA').textContent='0/7';
+  document.getElementById('hsA').textContent='0/9';
   document.getElementById('hsF').textContent='0';
   document.getElementById('hsQ').textContent='—';
   document.getElementById('hsC').textContent='0';
-  document.getElementById('sbA').textContent='0/7';
+  document.getElementById('sbA').textContent='0/9';
   document.getElementById('sbF').textContent='0';
   document.getElementById('sbSess').textContent='—';
   document.getElementById('dynB').innerHTML='<div class="empty">click benchmark</div>';
