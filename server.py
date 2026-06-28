@@ -319,6 +319,16 @@ async def websocket_endpoint(ws: WebSocket):
 async def health():
     return {"status": "ok", "sessions": len(sessions), "clients": len(manager.active)}
 
+@app.get("/api/memory/stats")
+async def memory_stats():
+    """Return past run stats and projects for the Memory tab on the dashboard."""
+    from core.memory.store import MemoryStore
+    store = MemoryStore()
+    return {
+        "stats": store.get_stats(),
+        "projects": store.list_projects()[:20],
+    }
+
 @app.get("/api/sessions")
 async def list_sessions():
     return {"sessions": list(sessions.values())}
