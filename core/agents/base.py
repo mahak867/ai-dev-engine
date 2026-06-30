@@ -235,12 +235,34 @@ Architecture Plan:
 
 Generate {'all' if batch == 'all' else f'batch {batch}'} production-ready files.
 Include package.json/requirements.txt with all dependencies.
-Make it fully functional — no mocks, no stubs."""
+Make it fully functional — no mocks, no stubs.
+IMPORTANT: Keep each file focused and concise so you can complete ALL files
+within the token budget. Prioritize completing every file over making any
+single file exhaustive — a working set of 8-12 complete files beats 3 huge
+ones cut off mid-generation."""
 
         msgs = self._messages(self.SYSTEM, prompt)
         try:
-            raw   = self.llm.complete(msgs, max_tokens=8192)
+            # Qwen 3.7 Max supports up to 1M context — use a much larger
+            # token budget than before (was 8192, silently truncating
+            # multi-file projects and dropping files after the cutoff).
+            raw = self.llm.complete(msgs, max_tokens=16384)
             files = self._parse_files(raw)
+
+            # Detect likely truncation: response ends mid-code-block (odd
+            # number of ``` fences) — if so, retry once with a tighter,
+            # more conservative prompt asking for fewer/smaller files.
+            fence_count = raw.count("```")
+            if fence_count % 2 != 0 and len(files) < 3:
+                log.warning("Coder output appears truncated (odd fence count); retrying with reduced scope")
+                retry_prompt = prompt + "\n\nIMPORTANT: Your previous attempt was cut off. " \
+                    "Generate FEWER files (max 6) but ensure every one is COMPLETE."
+                retry_msgs = self._messages(self.SYSTEM, retry_prompt)
+                raw2 = self.llm.complete(retry_msgs, max_tokens=16384)
+                files2 = self._parse_files(raw2)
+                if len(files2) > len(files):
+                    raw, files = raw2, files2
+
             return AgentResult(
                 agent=self.name, output=raw, files=files, duration=time.time()-t0
             )
@@ -288,7 +310,7 @@ Files as currently written:
 Fix every issue above and return the complete corrected files."""
         msgs = self._messages(self.REVISE_SYSTEM, prompt)
         try:
-            raw = self.llm.complete(msgs, max_tokens=8192)
+            raw = self.llm.complete(msgs, max_tokens=16384)
             revised = self._parse_files(raw)
             return AgentResult(
                 agent=self.name, output=raw, files=revised, duration=time.time()-t0
