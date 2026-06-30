@@ -69,17 +69,17 @@ class Agent:
         if files:
             return files
 
-        # Pattern 3: ```lang\n// path\n (path in first line even without file: prefix)
-        p3 = r"```(\w+)\s*\n(.*?)```"
+        # Pattern 3: ```lang\n// path\n (path in first line even without file: prefix,
+        # tolerating a blank line between the fence and the comment)
+        p3 = r"```(\w+)?\s*\n+(.*?)```"
         for m in re.finditer(p3, text, re.DOTALL):
-            lang = m.group(1)
             body = m.group(2)
-            first_line = body.split('\n')[0].strip()
-            # check if first line looks like a file path
+            lines = body.split('\n')
+            first_line = lines[0].strip() if lines else ""
             path_match = re.match(r'^(?://|#|/\*|<!--)?\s*([\w./\-]+\.(?:js|ts|py|go|rs|tsx|jsx|json|yaml|yml|env|md|sh|sql|html|css))\s*$', first_line)
             if path_match:
                 path = path_match.group(1).strip()
-                content = '\n'.join(body.split('\n')[1:]).rstrip()
+                content = '\n'.join(lines[1:]).rstrip()
                 files[path] = content
 
         if files:
@@ -89,6 +89,34 @@ class Agent:
         p4 = r"###\s+([\w./\-]+\.\w+)\s*\n```[^\n]*\n(.*?)```"
         for m in re.finditer(p4, text, re.DOTALL):
             files[m.group(1).strip()] = m.group(2).rstrip()
+
+        if files:
+            return files
+
+        # Pattern 5: **filename.ext** bold markdown header immediately before a fence
+        p5 = r"\*\*([\w./\-]+\.\w+)\*\*\s*\n```(?:\w+)?\s*\n(.*?)```"
+        for m in re.finditer(p5, text, re.DOTALL):
+            files[m.group(1).strip()] = m.group(2).rstrip()
+
+        if files:
+            return files
+
+        # Pattern 6: "File: filename.ext" or "Filename: filename.ext" header before a fence
+        p6 = r"(?:^|\n)\s*[Ff]ile(?:name)?:\s*([\w./\-]+\.\w+)\s*\n```(?:\w+)?\s*\n(.*?)```"
+        for m in re.finditer(p6, text, re.DOTALL):
+            files[m.group(1).strip()] = m.group(2).rstrip()
+
+        if files:
+            return files
+
+        # Pattern 7: any plain text line ending in a known extension right
+        # before a fence, regardless of bullets/dashes/markdown around it
+        p7 = r"([\w./\-]+\.(?:js|ts|py|go|rs|tsx|jsx|json|yaml|yml|env|md|sh|sql|html|css))\s*\n+```(?:\w+)?\s*\n(.*?)```"
+        for m in re.finditer(p7, text, re.DOTALL):
+            path = m.group(1).strip()
+            # avoid false positives like URLs
+            if '://' not in path and len(path) < 100:
+                files[path] = m.group(2).rstrip()
 
         return files
 
@@ -310,10 +338,17 @@ Output ONLY this JSON:
         t0 = time.time()
         code = context.get("code", "")
         if not code:
-            result = AgentResult(agent=self.name, output='{"score":100}', duration=0)
-            result.verdict = "approved"
-            result.score = 100
-            result.critical = []
+            # Empty code is a CRITICAL failure, not a pass. This usually means
+            # the Coder's output wasn't parsed correctly — flag it loudly
+            # instead of silently approving nothing as "100/100".
+            result = AgentResult(
+                agent=self.name,
+                output='{"score":0,"critical":["No files were generated or parsed - Coder output may be malformed"]}',
+                duration=0
+            )
+            result.verdict = "rejected"
+            result.score = 0
+            result.critical = ["No files were generated or parsed — Coder output may be malformed"]
             return result
         msgs = self._messages(self.SYSTEM, f"Review this code:\n\n{code}")
         try:
