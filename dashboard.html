@@ -182,6 +182,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <button class="tbtn prime" id="runBtn" onclick="doRun()">▶ RUN</button>
   <button class="tbtn" onclick="doBench()">⚡ BENCH</button>
   <button class="tbtn" onclick="doReset()">↺ RESET</button>
+  <button class="tbtn" id="dlBtn" style="display:none;background:#0a1f0d;border-color:#3B6D11;color:#97C459" title="Download generated files as ZIP">⬇ ZIP</button>
   <span class="clk" id="clk">00:00</span>
 </div>
 
@@ -601,12 +602,14 @@ function connectWS(){
     try{handleMsg(JSON.parse(e.data))}catch(err){}
   };
 }
+let currentSessionId = null;
 function wsSend(d){
   if(ws&&ws.readyState===1){ws.send(JSON.stringify(d));return true}
   return false;
 }
 function handleMsg(m){
   if(m.type==='session_created'){
+    currentSessionId = m.session_id; // keep FULL id for reliable API calls
     document.getElementById('sbSess').textContent=m.session_id.slice(0,8);
   }
   if(m.type==='agent_event'){
@@ -651,6 +654,12 @@ function handleMsg(m){
       }
       setStatus('DONE');stopClock();isRunning=false;
       document.getElementById('runBtn').disabled=false;
+      // reveal download button now that files exist
+      if(currentSessionId){
+        const dlBtn=document.getElementById('dlBtn');
+        dlBtn.style.display='inline-flex';
+        dlBtn.onclick=()=>window.open(`/api/sessions/${currentSessionId}/download`,'_blank');
+      }
     }
 
     // complete event (project ready)
@@ -901,7 +910,7 @@ document.addEventListener('keydown',e=>{
 
 // ── reset ──────────────────────────────────────────────────────────────────────
 function doReset(resetN=true){
-  logs=[];fileCnt=0;cveCnt=0;doneCnt=0;
+  logs=[];fileCnt=0;cveCnt=0;doneCnt=0;currentSessionId=null;
   stopClock();isRunning=false;
   document.getElementById('clk').textContent='00:00';
   document.getElementById('lp').innerHTML='<div class="empty">waiting...</div>';
@@ -913,6 +922,7 @@ function doReset(resetN=true){
   document.getElementById('sbA').textContent='0/9';
   document.getElementById('sbF').textContent='0';
   document.getElementById('sbSess').textContent='—';
+  document.getElementById('dlBtn').style.display='none';
   document.getElementById('dynB').innerHTML='<div class="empty">click benchmark</div>';
   document.getElementById('dynT').textContent='BENCHMARK';
   document.getElementById('runBtn').disabled=false;
