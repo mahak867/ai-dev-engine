@@ -297,6 +297,7 @@ class Orchestrator:
         if not self.dry_run:
             self._emit("Executor", "running", "Validating syntax of generated files...")
             passed, failed, total = 0, [], 0
+            node_available = True
             with tempfile.TemporaryDirectory() as tmpdir:
                 for fname, content in all_files.items():
                     if fname.endswith(".py"):
@@ -308,22 +309,41 @@ class Orchestrator:
                             failed.append(f"{fname}: {e}")
                     elif fname.endswith((".js", ".ts", ".tsx", ".jsx")):
                         total += 1
+                        if not node_available:
+                            if content.count("{") == content.count("}") and \
+                               content.count("(") == content.count(")"):
+                                passed += 1
+                            else:
+                                failed.append(f"{fname}: unbalanced brackets (basic check)")
+                            continue
                         fpath = Path(tmpdir) / fname.replace("/", "_")
                         fpath.write_text(content, encoding="utf-8")
-                        result = subprocess.run(
-                            ["node", "--check", str(fpath)],
-                            capture_output=True, timeout=10
-                        )
-                        if result.returncode == 0:
-                            passed += 1
-                        else:
-                            failed.append(f"{fname}: {result.stderr.decode()[:100]}")
+                        try:
+                            result = subprocess.run(
+                                ["node", "--check", str(fpath)],
+                                capture_output=True, timeout=10
+                            )
+                            if result.returncode == 0:
+                                passed += 1
+                            else:
+                                failed.append(f"{fname}: {result.stderr.decode()[:100]}")
+                        except FileNotFoundError:
+                            node_available = False
+                            log.warning("node binary not found — falling back to basic syntax check for JS/TS files")
+                            if content.count("{") == content.count("}") and \
+                               content.count("(") == content.count(")"):
+                                passed += 1
+                            else:
+                                failed.append(f"{fname}: unbalanced brackets (basic check)")
+                        except subprocess.TimeoutExpired:
+                            failed.append(f"{fname}: syntax check timed out")
 
             if total == 0:
                 self._emit("Executor", "done", "No validatable files (non-Python/JS project)")
             elif not failed:
+                suffix = " (basic check — node unavailable on host)" if not node_available else ""
                 self._emit("Executor", "done",
-                    f"✓ All {passed}/{total} files pass syntax validation")
+                    f"✓ All {passed}/{total} files pass syntax validation{suffix}")
                 self._dialogue("Executor", "DocWriter", "validation",
                     f"Syntax validation PASSED: {passed}/{total} files validated. "
                     f"Code is syntactically correct and ready for deployment.")

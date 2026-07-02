@@ -319,6 +319,44 @@ async def websocket_endpoint(ws: WebSocket):
 async def health():
     return {"status": "ok", "sessions": len(sessions), "clients": len(manager.active)}
 
+@app.get("/api/sessions/{session_id}/files")
+async def get_session_files(session_id: str):
+    """List all files generated for a session."""
+    import pathlib as _pl
+    run_dir = _pl.Path("runs")
+    candidates = list(run_dir.glob(f"{session_id[:8]}*")) if run_dir.exists() else []
+    if not candidates:
+        return {"files": [], "message": "No files generated yet or session not found"}
+    matched = candidates[0]
+    files = [{"path": str(f.relative_to(matched)), "size": f.stat().st_size}
+             for f in matched.rglob("*") if f.is_file()]
+    return {"session_id": session_id, "file_count": len(files), "files": files}
+
+@app.get("/api/sessions/{session_id}/download")
+async def download_session(session_id: str):
+    """Download all generated files for a session as a ZIP archive."""
+    import pathlib as _pl, zipfile as _zf, io as _io
+    from fastapi.responses import StreamingResponse, JSONResponse
+    run_dir = _pl.Path("runs")
+    candidates = list(run_dir.glob(f"{session_id[:8]}*")) if run_dir.exists() else []
+    if not candidates:
+        return JSONResponse({"error": "No files found for this session"}, status_code=404)
+    matched = candidates[0]
+    buf = _io.BytesIO()
+    file_count = 0
+    with _zf.ZipFile(buf, "w", _zf.ZIP_DEFLATED) as zf:
+        for f in matched.rglob("*"):
+            if f.is_file():
+                zf.write(f, f.relative_to(matched))
+                file_count += 1
+    if file_count == 0:
+        return JSONResponse({"error": "Session folder exists but contains no files"}, status_code=404)
+    buf.seek(0)
+    return StreamingResponse(
+        buf, media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=apex-{session_id[:8]}.zip"}
+    )
+
 @app.get("/api/memory/stats")
 async def memory_stats():
     """Return past run stats and projects for the Memory tab on the dashboard."""
