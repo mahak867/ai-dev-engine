@@ -1,6 +1,6 @@
 # APEX Society — Qwen Cloud AI Hackathon | Track 3: Agent Society
 
-> A production-grade multi-agent system where 7 specialized Qwen 3.7 agents collaborate, negotiate, and self-correct to build full-stack applications — with a real conflict resolution loop that rejects, revises, and approves code before it ships.
+> A production-grade multi-agent system where 9 specialized Qwen 3.7 agents collaborate, negotiate, and self-correct to build full-stack applications — with a real conflict resolution loop that rejects, revises, and approves code before it ships.
 
 **[Global AI Hackathon Series with Qwen Cloud](https://qwencloud-hackathon.devpost.com/) — Track 3: Agent Society**
 
@@ -10,13 +10,13 @@
 
 ## Demo Video
 
-> 📹 **[APEX Society Demo — 7-Agent Qwen AI System](https://youtu.be/XBzURya6XAk)**
+> 📹 **[APEX Society Demo — 9-Agent Qwen AI System](https://youtu.be/XBzURya6XAk)**
 
 ---
 
 ## What It Does
 
-APEX Society takes a single sentence — "build a REST API with JWT auth" — and runs it through a society of 7 specialized Qwen 3.7 agents. Each agent has a distinct role and communicates structured outputs to the next via a real-time WebSocket dialogue system.
+APEX Society takes a single sentence — "build a REST API with JWT auth" — and runs it through a society of 9 specialized Qwen 3.7 agents. Each agent has a distinct role and communicates structured outputs to the next via a real-time WebSocket dialogue system.
 
 The core innovation: **agents can disagree**. The Reviewer can reject the Coder's output, send structured feedback, and force a revision cycle — up to 3 rounds — before approving. This is real agent negotiation, not a scripted pipeline.
 
@@ -121,7 +121,7 @@ Real-time visualization built with SVG `animateMotion`, force-directed graph phy
 
 ## Alibaba Cloud Integration
 
-All 7 agents route through Alibaba Cloud DashScope:
+All 9 agents route through Alibaba Cloud DashScope:
 
 ```python
 # core/ai/provider.py
@@ -169,7 +169,7 @@ uvicorn server:app --host 0.0.0.0 --port 8000
 
 ```bash
 python benchmark.py
-# Single agent vs 7-agent society — files, quality, CVE comparison
+# Single agent vs 9-agent society — files, quality, CVE comparison
 ```
 
 ---
@@ -184,7 +184,7 @@ apex-society/
 ├── alibaba_cloud_proof.py    # Alibaba Cloud connection proof
 ├── core/
 │   ├── orchestrator.py       # Pipeline + conflict resolution loop
-│   ├── agents/base.py        # All 7 agent implementations
+│   ├── agents/base.py        # All 9 agent implementations
 │   ├── ai/provider.py        # Qwen Cloud router + retry logic
 │   └── memory/store.py       # Persistent session memory
 └── tests/test_apex.py        # 35 tests passing
