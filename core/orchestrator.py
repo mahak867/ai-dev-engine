@@ -156,8 +156,14 @@ class Orchestrator:
         if not self.dry_run:
             code_result = self.coder.run(ctx)
             all_files.update(code_result.files)
-            self._emit("Coder", "done", f"{len(all_files)} files generated ({code_result.duration:.1f}s)")
-            # DIALOGUE: Coder → Reviewer
+            if not code_result.success:
+                self._emit("Coder", "error", f"Coder failed: {code_result.error}")
+            elif len(all_files) < 3:
+                self._emit("Coder", "error",
+                    f"Only {len(all_files)} file(s) generated — may indicate a parsing "
+                    f"or generation issue. Raw output was {len(code_result.output)} chars.")
+            else:
+                self._emit("Coder", "done", f"{len(all_files)} files generated ({code_result.duration:.1f}s)")
             self._dialogue("Coder", "Reviewer",
                 "handoff",
                 f"Code generation complete. {len(all_files)} files produced. Requesting security audit and quality review. Files: {list(all_files.keys())[:8]}")
@@ -302,7 +308,7 @@ class Orchestrator:
                             failed.append(f"{fname}: {e}")
                     elif fname.endswith((".js", ".ts", ".tsx", ".jsx")):
                         total += 1
-                        fpath = pathlib.Path(tmpdir) / fname.replace("/", "_")
+                        fpath = Path(tmpdir) / fname.replace("/", "_")
                         fpath.write_text(content, encoding="utf-8")
                         result = subprocess.run(
                             ["node", "--check", str(fpath)],
