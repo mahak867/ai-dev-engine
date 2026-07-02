@@ -44,81 +44,115 @@ class Agent:
                 {"role": "user",   "content": user}]
 
     def _parse_files(self, text: str) -> dict[str, str]:
-        """Extract code blocks from LLM output — handles all Qwen3.7 output patterns."""
-        files = {}
+        """
+        Extract code blocks from LLM output.
 
-        # Pattern 1: ```lang\n# file: path or file: path on fence line
-        p1 = r"```(?:\w+)?\s*\n?(?:#\s*)?(?:file:\s*)?([\w./\-]+\.\w+)\n(.*?)```"
-        for m in re.finditer(p1, text, re.DOTALL):
-            path = m.group(1).strip()
-            content = m.group(2).rstrip()
-            if path and '.' in path:
-                files[path] = content
+        CRITICAL DESIGN NOTE: this used to try whole-text regex patterns in
+        priority order and return as soon as ANY pattern found a match
+        anywhere in the text. That silently dropped every file that used a
+        DIFFERENT format than the first matched file — e.g. if file 1 used
+        "# file: x.json" and files 2-10 used "// src/y.ts" comments (very
+        common since JSON/YAML can't use # comments the same way JS/TS
+        does), only file 1 would ever be extracted. This is now fixed by
+        finding every fenced code block first, then trying each path-
+        extraction pattern independently PER BLOCK, so mixed formats in a
+        single response are all captured correctly.
+        """
+        files: dict[str, str] = {}
 
-        if files:
-            return files
+        # Step 1: find every fenced code block ```lang\n...content...```
+        # Capture the block's own header line for path attempts, plus
+        # whatever plain text appears in the ~150 chars immediately before
+        # the fence (covers "**file.ts**\n```" and "File: file.ts\n```").
+        block_pattern = r"```(\w*)\n(.*?)```"
+        last_end = 0
 
-        # Pattern 2: ```lang\n// src/file.ext (Qwen3.7 default — path as first comment line)
-        p2 = r"```(?:\w+)?\s*\n(?://|#)\s*([\w./\-]+\.\w+)\s*\n(.*?)```"
-        for m in re.finditer(p2, text, re.DOTALL):
-            path = m.group(1).strip()
-            content = m.group(2).rstrip()
-            if path and '.' in path:
-                files[path] = content
-
-        if files:
-            return files
-
-        # Pattern 3: ```lang\n// path\n (path in first line even without file: prefix,
-        # tolerating a blank line between the fence and the comment)
-        p3 = r"```(\w+)?\s*\n+(.*?)```"
-        for m in re.finditer(p3, text, re.DOTALL):
+        for m in re.finditer(block_pattern, text, re.DOTALL):
+            lang = m.group(1)
             body = m.group(2)
-            lines = body.split('\n')
-            first_line = lines[0].strip() if lines else ""
-            path_match = re.match(r'^(?://|#|/\*|<!--)?\s*([\w./\-]+\.(?:js|ts|py|go|rs|tsx|jsx|json|yaml|yml|env|md|sh|sql|html|css))\s*$', first_line)
-            if path_match:
-                path = path_match.group(1).strip()
-                content = '\n'.join(lines[1:]).rstrip()
-                files[path] = content
+            block_start = m.start()
+            preceding_text = text[max(0, block_start-150):block_start]
 
-        if files:
-            return files
-
-        # Pattern 4: ### filename.ext header fallback
-        p4 = r"###\s+([\w./\-]+\.\w+)\s*\n```[^\n]*\n(.*?)```"
-        for m in re.finditer(p4, text, re.DOTALL):
-            files[m.group(1).strip()] = m.group(2).rstrip()
-
-        if files:
-            return files
-
-        # Pattern 5: **filename.ext** bold markdown header immediately before a fence
-        p5 = r"\*\*([\w./\-]+\.\w+)\*\*\s*\n```(?:\w+)?\s*\n(.*?)```"
-        for m in re.finditer(p5, text, re.DOTALL):
-            files[m.group(1).strip()] = m.group(2).rstrip()
-
-        if files:
-            return files
-
-        # Pattern 6: "File: filename.ext" or "Filename: filename.ext" header before a fence
-        p6 = r"(?:^|\n)\s*[Ff]ile(?:name)?:\s*([\w./\-]+\.\w+)\s*\n```(?:\w+)?\s*\n(.*?)```"
-        for m in re.finditer(p6, text, re.DOTALL):
-            files[m.group(1).strip()] = m.group(2).rstrip()
-
-        if files:
-            return files
-
-        # Pattern 7: any plain text line ending in a known extension right
-        # before a fence, regardless of bullets/dashes/markdown around it
-        p7 = r"([\w./\-]+\.(?:js|ts|py|go|rs|tsx|jsx|json|yaml|yml|env|md|sh|sql|html|css))\s*\n+```(?:\w+)?\s*\n(.*?)```"
-        for m in re.finditer(p7, text, re.DOTALL):
-            path = m.group(1).strip()
-            # avoid false positives like URLs
-            if '://' not in path and len(path) < 100:
-                files[path] = m.group(2).rstrip()
+            path = self._extract_path_for_block(body, preceding_text, lang)
+            if path:
+                content = self._strip_leading_path_comment(body, path)
+                files[path] = content.rstrip()
+            last_end = m.end()
 
         return files
+
+    def _extract_path_for_block(self, body: str, preceding_text: str, lang: str) -> str | None:
+        """Try every known path-location pattern for a single code block."""
+        lines = body.split('\n')
+        # skip leading blank lines when looking for the path comment
+        content_lines = [l for l in lines if l.strip() != ""] or lines
+        first_line = content_lines[0].strip() if content_lines else ""
+
+        # Broad extension list covering common full-stack + config files
+        exts = (r'(?:js|ts|jsx|tsx|py|go|rs|rb|java|kt|swift|c|cpp|h|hpp|'
+                r'json|yaml|yml|toml|ini|cfg|conf|env|md|sh|bash|sql|'
+                r'html|htm|css|scss|less|vue|svelte|prisma|graphql|proto|'
+                r'txt|xml|dockerfile|gitignore|editorconfig|lock|example)')
+        # Also match multi-part extensions like .env.example, .env.local
+        multi_ext = r'(?:\.\w+)?\.' + exts
+
+        def _try(pattern_body: str) -> str | None:
+            m = re.match(
+                rf'^(?:#\s*|//\s*|/\*\s*|<!--\s*)?(?:file(?:name)?:\s*)?'
+                rf'([\w./\-]+{multi_ext})\s*(?:\*/|-->)?$',
+                pattern_body, re.IGNORECASE
+            )
+            return m.group(1).strip() if m else None
+
+        # A) path as the first line inside the block
+        p = _try(first_line)
+        if p:
+            return p
+
+        # A2) known extensionless/special files: Dockerfile, Makefile, .env,
+        # .gitignore — first line is exactly the filename with no extension
+        special_files = {'dockerfile', 'makefile', '.env', '.gitignore',
+                          '.dockerignore', '.editorconfig', 'procfile'}
+        stripped_first = re.sub(r'^(?:#\s*|//\s*)', '', first_line).strip().lower()
+        if stripped_first in special_files:
+            return re.sub(r'^(?:#\s*|//\s*)', '', first_line).strip()
+
+        # B) "**path**" bold markdown header immediately before the fence
+        pre = preceding_text.strip()
+        m = re.search(rf'\*\*([\w./\-]+{multi_ext})\*\*\s*$', pre, re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+
+        # C) "### path" markdown heading immediately before the fence
+        m = re.search(rf'###\s+([\w./\-]+{multi_ext})\s*$', pre, re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+
+        # D) "File: path" or "Filename: path" plain text immediately before the fence
+        m = re.search(rf'[Ff]ile(?:name)?:\s*([\w./\-]+{multi_ext})\s*$', pre, re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+
+        # E) a bare path on its own line right before the fence (no prefix at all)
+        last_line = pre.split('\n')[-1].strip() if pre else ""
+        m = re.match(rf'^([\w./\-]+{multi_ext})$', last_line, re.IGNORECASE)
+        if m and '://' not in m.group(1):
+            return m.group(1).strip()
+
+        return None
+
+    def _strip_leading_path_comment(self, body: str, path: str) -> str:
+        """If the path was embedded as a comment line near the top of the
+        block (possibly after leading blank lines), remove that line so
+        the file content doesn't start with a redundant path comment."""
+        lines = body.split('\n')
+        for i, line in enumerate(lines):
+            if line.strip() == "":
+                continue
+            if path in line:
+                return '\n'.join(lines[:i] + lines[i+1:])
+            break
+        return body
 
 
 # ── Planner Agent ──────────────────────────────────────────────────────────────
@@ -254,14 +288,21 @@ ones cut off mid-generation."""
             # more conservative prompt asking for fewer/smaller files.
             fence_count = raw.count("```")
             if fence_count % 2 != 0 and len(files) < 3:
-                log.warning("Coder output appears truncated (odd fence count); retrying with reduced scope")
+                log.warning(f"Coder output appears truncated (odd fence count={fence_count}, "
+                            f"only {len(files)} files parsed); retrying with reduced scope")
                 retry_prompt = prompt + "\n\nIMPORTANT: Your previous attempt was cut off. " \
                     "Generate FEWER files (max 6) but ensure every one is COMPLETE."
                 retry_msgs = self._messages(self.SYSTEM, retry_prompt)
                 raw2 = self.llm.complete(retry_msgs, max_tokens=16384)
                 files2 = self._parse_files(raw2)
+                log.info(f"Retry produced {len(files2)} files (vs {len(files)} originally)")
                 if len(files2) > len(files):
                     raw, files = raw2, files2
+
+            if len(files) < 2:
+                log.error(f"Coder produced only {len(files)} file(s). "
+                          f"Raw output length: {len(raw)} chars. "
+                          f"First 300 chars: {raw[:300]!r}")
 
             return AgentResult(
                 agent=self.name, output=raw, files=files, duration=time.time()-t0
