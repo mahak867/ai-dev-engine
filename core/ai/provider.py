@@ -49,15 +49,18 @@ PAID_MODELS = [m for m, i in MODELS.items() if not i["free"]]
 VISION_MODELS = [m for m, i in MODELS.items() if i.get("vision")]
 
 # ── Cascades — Qwen 3.7 first, legacy Qwen second, Groq fallback ──────────────
+# FREE quota cascades — qwen3.7-plus is primary (999,597 free tokens remaining
+# on Token Plan, same Qwen 3.7 family, vision-capable).
+# qwen3.7-max exhausted free quota — now pay-as-you-go only, kept as fallback.
 DEFAULT_CASCADE = [
-    "qwen/qwen3.7-max",
+    "qwen/qwen3.7-plus",
     "qwen/qwen-plus",
     "qwen/qwen-turbo",
     "groq/llama-3.3-70b",
     "groq/qwen-qwq-32b",
 ]
 CODING_CASCADE = [
-    "qwen/qwen3.7-max",
+    "qwen/qwen3.7-plus",
     "qwen/qwen-plus",
     "qwen/qwen-turbo",
     "groq/qwen-qwq-32b",
@@ -66,9 +69,10 @@ CODING_CASCADE = [
     "ollama/deepseek-coder-v2",
 ]
 REASONING_CASCADE = [
+    "qwen/qwen3.7-plus",
     "qwen/qwen3.7-max",
-    "qwen/qwen-max",
     "qwen/qwen-plus",
+    "qwen/qwen-max",
     "groq/qwen-qwq-32b",
     "groq/llama-3.3-70b",
     "ollama/qwen2.5:72b",
