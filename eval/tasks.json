@@ -1,0 +1,122 @@
+[
+  {
+    "id": "todo-api",
+    "task": "Flask REST API for a todo list: CRUD endpoints, SQLite storage, input validation, pytest tests"
+  },
+  {
+    "id": "url-shortener",
+    "task": "Python URL shortener service: create/resolve short links, collision-safe codes, SQLite, pytest tests"
+  },
+  {
+    "id": "jwt-auth",
+    "task": "FastAPI service with user registration and login issuing JWTs, bcrypt password hashing, protected /me route, pytest tests"
+  },
+  {
+    "id": "notes-search",
+    "task": "Flask notes API with full-text search over title/body, pagination, SQLite, pytest tests"
+  },
+  {
+    "id": "expense-tracker",
+    "task": "Expense tracker REST API: categories, monthly totals endpoint, CSV export, SQLite, pytest tests"
+  },
+  {
+    "id": "inventory",
+    "task": "Inventory management API: products, stock adjustments with audit log, low-stock report, pytest tests"
+  },
+  {
+    "id": "blog-api",
+    "task": "Blog backend: posts, comments, tags, slug generation, pagination, SQLite, pytest tests"
+  },
+  {
+    "id": "rate-limiter",
+    "task": "Python HTTP API with a per-client token-bucket rate limiter middleware and a /limited endpoint, pytest tests"
+  },
+  {
+    "id": "file-upload",
+    "task": "Flask file upload service: size and extension validation, safe filenames, list/download endpoints, pytest tests"
+  },
+  {
+    "id": "webhook-receiver",
+    "task": "Webhook receiver that verifies HMAC-SHA256 signatures, stores events, and exposes a replay-safe processing endpoint, pytest tests"
+  },
+  {
+    "id": "library-system",
+    "task": "Library lending API: books, members, checkouts with due dates and overdue listing, pytest tests"
+  },
+  {
+    "id": "event-booking",
+    "task": "Event booking API: events with capacity, bookings that never oversell under concurrent requests, pytest tests"
+  },
+  {
+    "id": "quiz-api",
+    "task": "Quiz backend: questions, timed attempts, scoring, leaderboard endpoint, SQLite, pytest tests"
+  },
+  {
+    "id": "pastebin",
+    "task": "Pastebin clone API: create pastes with expiry, raw view, syntax language field, delete via secret token, pytest tests"
+  },
+  {
+    "id": "weather-cache",
+    "task": "Service that wraps a weather API with a TTL cache and an injectable HTTP client so tests need no network, pytest tests"
+  },
+  {
+    "id": "csv-analytics",
+    "task": "API that accepts a CSV upload and returns column statistics (count, mean, min, max, nulls), pytest tests"
+  },
+  {
+    "id": "habit-tracker",
+    "task": "Habit tracker API: habits, daily check-ins, current and longest streak calculation, pytest tests"
+  },
+  {
+    "id": "invoice-generator",
+    "task": "Invoice API: line items, tax calculation with Decimal, invoice totals and status transitions, pytest tests"
+  },
+  {
+    "id": "chat-rooms",
+    "task": "Chat backend: rooms, messages with pagination, simple membership checks, SQLite, pytest tests"
+  },
+  {
+    "id": "password-reset",
+    "task": "Password reset flow API: request token, time-limited single-use reset tokens, hashed storage, pytest tests"
+  },
+  {
+    "id": "feature-flags",
+    "task": "Feature flag service: flags with percentage rollout by user id hash, admin CRUD, evaluation endpoint, pytest tests"
+  },
+  {
+    "id": "job-queue",
+    "task": "In-process background job queue API: submit job, poll status, retries with backoff, pytest tests"
+  },
+  {
+    "id": "recipe-api",
+    "task": "Recipe API: recipes, ingredients, scaling servings, search by ingredient, pytest tests"
+  },
+  {
+    "id": "polls",
+    "task": "Polling app API: create poll, vote once per user, results endpoint, close poll, pytest tests"
+  },
+  {
+    "id": "crm-contacts",
+    "task": "CRM contacts API: contacts, companies, notes, email format validation, dedupe on email, pytest tests"
+  },
+  {
+    "id": "kv-store",
+    "task": "HTTP key-value store with TTL, prefix listing, and compare-and-set semantics, pytest tests"
+  },
+  {
+    "id": "markdown-wiki",
+    "task": "Wiki API storing pages in Markdown with revision history and diff between revisions, pytest tests"
+  },
+  {
+    "id": "api-keys",
+    "task": "API key management service: issue keys shown once, store only hashes, revoke, authenticate requests, pytest tests"
+  },
+  {
+    "id": "order-checkout",
+    "task": "E-commerce checkout API: cart, stock reservation, order creation with Decimal totals and idempotency keys, pytest tests"
+  },
+  {
+    "id": "audit-log",
+    "task": "Audit log service: append-only events, tamper-evident hash chain, verification endpoint, pytest tests"
+  }
+]

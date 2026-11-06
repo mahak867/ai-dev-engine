@@ -119,7 +119,8 @@ def cmd_list(args: argparse.Namespace):
     store = MemoryStore()
     projects = store.list_projects()
     if not projects:
-        print(f"\n  {muted('No projects yet. Run: apex generate \"your app idea\"')}\n")
+        hint = muted('No projects yet. Run: apex generate "your app idea"')
+        print(f"\n  {hint}\n")
         return
     print(f"\n  {bold('Projects:')}\n")
     for p in projects:

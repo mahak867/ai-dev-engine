@@ -7,7 +7,6 @@ from __future__ import annotations
 import json, os, re, time, hashlib, tempfile
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
-from typing import Any
 
 from core.security import redact
 
@@ -38,6 +37,8 @@ class ProjectMemory:
     review_rounds: int = 0
     file_count: int = 0
     lessons_learned: list[str] = field(default_factory=list)
+    usage: dict = field(default_factory=dict)      # tokens / cost / seconds for the run
+    sandbox: dict = field(default_factory=dict)    # Executor sandbox outcome
 
     @property
     def id(self) -> str:

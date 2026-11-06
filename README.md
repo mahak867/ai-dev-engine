@@ -1,241 +1,176 @@
-# APEX Society — Qwen Cloud AI Hackathon | Track 3: Agent Society
+# APEX Society — a 9-agent AI software team
 
-> A multi-agent system where 7 specialized LLM agents (plus a syntax-check Executor and persistent Memory — 9 pipeline roles) collaborate, negotiate, and self-correct to build full-stack applications — with a real conflict resolution loop that rejects, revises, and approves code before it ships.
+[![CI](https://github.com/mahak867/ai-dev-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/mahak867/ai-dev-engine/actions/workflows/ci.yml)
 
-**[Global AI Hackathon Series with Qwen Cloud](https://qwencloud-hackathon.devpost.com/) — Track 3: Agent Society**
+One sentence in, a working project out. Nine agents plan, write, review, **run** and repair the code, and they can disagree: the Reviewer rejects the Coder's work and forces revisions, and the Executor runs the result in a network-isolated Docker sandbox and sends real test failures back to be fixed.
 
-**Hosted demo:** the hackathon instance on Alibaba Cloud ECS (Singapore) has been decommissioned. Run it locally with the Quick Start below.
+![APEX Society dashboard — demo replay](docs/demo.gif)
 
----
+<sub>Dashboard during a demo replay (canned agent outputs, no LLM). Real runs look the same and stream live.</sub>
 
-## Demo Video
-
-> 📹 **[APEX Society Demo — 9-Agent Qwen AI System](https://youtu.be/XBzURya6XAk)**
+Built for the [Global AI Hackathon Series with Qwen Cloud](https://qwencloud-hackathon.devpost.com/) (Track 3: Agent Society) · [demo video](https://youtu.be/XBzURya6XAk)
 
 ---
 
-## What It Does
+## The 9 agents
 
-APEX Society takes a single sentence — "build a REST API with JWT auth" — and runs it through a society of 7 LLM agents plus an Executor and Memory. Each agent has a distinct role and communicates structured outputs to the next via a real-time WebSocket dialogue system.
-
-The core innovation: **agents can disagree**. The Reviewer can reject the Coder's output, send structured feedback, and force a revision cycle — up to 3 rounds — before approving. This is real agent negotiation, not a scripted pipeline.
-
----
-
-## Benchmark: Society vs Single Agent
-
-> Recorded once during the hackathon on a single task (n=1). Quality scores are the Reviewer agent's own 0–100 assessment, not an independent security scan. Reproduce with `python benchmark.py`.
-
-| Metric | Single Agent | APEX Society |
-|---|---|---|
-| Files generated | 5 | **17–22** |
-| Quality score | 91/100 | **96–100/100** |
-| Security checks passed | 9/10 | **10/10** |
-| Critical issues flagged by Reviewer | **1** (hardcoded secret) | **0** |
-| Agents coordinating | 1 | **7** |
-| Conflict resolution rounds | 0 | **up to 3** |
-
-**The critical finding:** The single agent shipped a hardcoded JWT secret fallback (`SECRET_KEY = os.getenv("SECRET_KEY", "09d25e094faa...")`) — a real CVE-level vulnerability. The Reviewer agent caught it, rejected the code, forced a revision, and verified the fix. Zero secrets shipped.
+| # | Agent | Kind | Job |
+|---|---|---|---|
+| 1 | **Planner** | LLM | Request → JSON plan: stack, files, routes, schema, security notes |
+| 2 | **Architect** | LLM | Structure and patterns; runs **in parallel** with the Planner |
+| 3 | **Coder** | LLM | Writes every file; revises on rejection |
+| 4 | **Reviewer** | LLM | Scores 0–100; rejects on critical/security issues, up to 3 rounds |
+| 5 | **SelfHealer** | LLM | Patches leftover review issues and **real sandbox failures** |
+| 6 | **Debugger** | LLM | Hunts runtime errors (imports, undefined names, startup crashes) |
+| 7 | **Executor** | tool | Syntax check, then install → compile → import → pytest in Docker |
+| 8 | **DocWriter** | LLM | README |
+| 9 | **Memory** | tool | Learns from past runs and injects lessons into new ones |
 
 ```
-Track 3 requirement: "how they resolve disagreements and execution conflicts"
-Result: Real Reviewer→Coder→Reviewer reject/revise/approve loop with structured dialogue
+            Memory ─────────────┐ (lessons from past runs)
+                                ▼
+ request ─► Planner ∥ Architect ─► Coder ⇄ Reviewer ─► SelfHealer ─► Debugger
+                                   (reject / revise,                      │
+                                    up to 3 rounds)                       ▼
+                         ┌──────────────── Executor (Docker sandbox) ◄────┘
+                         │ fail: real error output ─► SelfHealer ─► re-run (≤2)
+                         ▼ pass
+                      DocWriter ─► project/ + per-agent token & cost report
 ```
 
 ---
 
-## Track 3 Requirements — Explicitly Met
+## What's measurable
 
-| Requirement | How APEX Society meets it |
+**Per-agent cost and latency.** Every LLM call is attributed to the agent that made it: tokens (from the provider's `usage` block), seconds, and cost when a price is configured. You see it at the end of every dashboard run, in each MCP result, and in the eval report.
+
+**Independent eval harness** ([`eval/`](eval/)). Single agent vs. society on 30 fixed backend tasks, the same pinned model for both, scored **without any LLM**:
+
+| Signal | Tool |
 |---|---|
-| **Agents decompose tasks and assign roles** | Planner outputs structured JSON (tech stack, files, API routes, DB schema) distributed to each agent |
-| **Agents resolve disagreements and execution conflicts** | Reviewer scores code 0–100. Score <80 or any critical issue → REJECTED. Structured rejection notes sent to Coder. Coder revises targeted files only. Reviewer re-reviews. Up to 3 rounds. |
-| **Measurable efficiency gain over single-agent** | +12–17 files, +5–9 Reviewer quality score, 1 Reviewer-flagged critical issue (hardcoded secret) fixed — single recorded run |
+| Security findings | Bandit (HIGH / MEDIUM), Ruff `S` rules |
+| Hardcoded secrets | Token formats + `getenv("KEY", "literal")` fallbacks |
+| Bugs / syntax | Ruff `E9,F,B`, `ast.parse` |
+| Does it actually work | Docker sandbox: deps install, app imports, pytest pass rate |
+| Cost | Tokens, USD, wall time |
 
----
-
-## Conflict Resolution Loop (Track 3 Core Feature)
-
-```
-Reviewer scores code → REJECTED (score 68/100, 2 blocking issues)
-        ↓
-Reviewer → Coder: "REJECTED. Fix: hardcoded JWT secret; missing input validation"
-        ↓
-Coder revises 2 files (targeted patch, not full rewrite)
-        ↓
-Coder → Reviewer: "Revision complete. Patched auth.py, config.py. Resubmitting."
-        ↓
-Reviewer re-reviews → APPROVED (score 96/100)
-        ↓
-Reviewer → SelfHealer: "Code approved after 2 rounds. No critical issues remain."
-```
-
-Visible in real time on the dashboard — Reviewer node pulses red on rejection, Agent Dialogue panel shows every message, quality score updates live after each round.
-
----
-
-## Architecture
-
-```
-User Input → FastAPI WebSocket Server (server.py, port 8000)
-                        │
-                        ▼
-              APEX Orchestrator (core/orchestrator.py)
-                        │
-    ┌───────────────────┼───────────────────┐
-    ▼                   ▼                   ▼
-🗺  Planner         🏛  Architect        📝 DocWriter
-JSON plan           Security decisions   README.md
-    │                   │
-    └──────────┐        │
-               ▼        ▼
-           👨‍💻 Coder (production code, 17–22 files)
-               │
-               ▼ ◄──────────────────────────┐
-           🔍 Reviewer (score 0–100)          │
-           REJECTED → revision notes ─────────┘
-           APPROVED → continue (up to 3 rounds)
-               │
-           🔧 SelfHealer (auto-patch CVEs)
-               │
-           🐛 Debugger (runtime error check)
-               │
-           ✅ Output
-
-All inference: Alibaba Cloud DashScope (dashscope-intl.aliyuncs.com)
-Primary model: qwen3.7-max  |  Vision: qwen3.7-plus
-Fallback cascade: qwen-plus → qwen-turbo → groq/llama-3.3-70b
-```
-
----
-
-## Live Dashboard
-
-Real-time visualization built with SVG `animateMotion`, force-directed graph physics, WebSocket streaming, and Octogent-style pixel art animated characters.
-
-- **Animated ghost characters** — jog/bounce/sway/float per agent state; angry face on rejection
-- **Agent Dialogue panel** — live `Reviewer → Coder` rejection and `Coder → Reviewer` patch messages
-- **Quality score** — updates in header after each Reviewer round
-- **Security panel** — auto-opens when CVEs are detected
-- **Benchmark tab** — live Society vs Single Agent comparison
-
----
-
-## Alibaba Cloud Integration
-
-All LLM agents route through Alibaba Cloud DashScope by default:
-
-```python
-# core/ai/provider.py
-ENDPOINT = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions"
-PRIMARY   = "qwen3.7-max"   # 1M context, agent-tuned
-VISION    = "qwen3.7-plus"  # multimodal wireframe input
-```
-
-**Deployment (hackathon, now decommissioned):** Alibaba Cloud ECS, ap-southeast-1 (Singapore).
+The report gives paired per-task differences with bootstrap 95% CIs and win/tie/loss counts. The society gets a fresh memory per task, so it can't learn the test set.
 
 ```bash
-python alibaba_cloud_proof.py
-# ✓ ALIBABA CLOUD CONNECTION VERIFIED
-# ✓ APEX SOCIETY IS RUNNING ON ALIBABA CLOUD
+APEX_MODEL=groq/llama-3.3-70b GROQ_API_KEY=... \
+APEX_SANDBOX=docker python eval/run_eval.py --sandbox      # writes eval/results/<run>/summary.md
+python eval/run_eval.py --self-test --limit 3               # offline check of the harness itself
 ```
+
+> **Results: not yet published for this version.** The earlier hackathon comparison (single 91/100 vs society 100/100) was one task scored by the Reviewer agent itself, so it isn't evidence; this harness replaces it. Run it and commit `summary.md`.
 
 ---
 
-## MCP Integration
+## Use it
 
-8 typed tools (7 agents + a static benchmark summary), served by `server.py` under `/mcp/*` or standalone by `mcp_server.py` (port 8001). This is a JSON-over-HTTP tool API in the spirit of MCP, not the JSON-RPC transport from the MCP spec.
-
-```bash
-curl http://127.0.0.1:8000/mcp/tools                 # list tools
-curl -X POST http://127.0.0.1:8000/mcp/tools/plan_project \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $APEX_API_TOKEN" \
-  -d '{"request":"build a todo API","name":"myapp"}'
-```
-
----
-
-## Quick Start
+### Dashboard
 
 ```bash
-git clone https://github.com/mahak867/ai-dev-engine
-cd ai-dev-engine
 pip install -r requirements.txt
-cp .env.example .env          # add QWEN_API_KEY
-python server.py              # binds 127.0.0.1:8000
-# open http://localhost:8000
+cp .env.example .env            # add GROQ_API_KEY (free) or QWEN_API_KEY
+python server.py                # http://localhost:8000  (binds 127.0.0.1)
 ```
 
-CLI only (wheel install): `pip install .` then `apex generate "todo app" --name todo --dry-run`.
-The web server and dashboard run from a source checkout (`pip install ".[server]"`).
+In the dashboard you can paste a key just for one run, or tick **demo replay** to watch the pipeline with no key.
+
+### MCP server (Claude Desktop, Claude Code, Cursor)
+
+`pip install ".[mcp]"`. Built on the official MCP Python SDK. Tools: `generate_project` (the full 9-agent pipeline, writes to `~/apex-projects`) plus the 7 single-agent tools (`plan_project`, `generate_code`, `review_code`, …). Resource: `apex://agents`.
+
+```json
+{
+  "mcpServers": {
+    "apex-society": {
+      "command": "apex-mcp",
+      "env": { "GROQ_API_KEY": "gsk_...", "APEX_SANDBOX": "docker" }
+    }
+  }
+}
+```
+
+`apex-mcp --http` serves Streamable HTTP on `127.0.0.1:8002/mcp` with DNS-rebinding protection. Non-loopback binds require `APEX_API_TOKEN`.
+
+### CLI
+
+```bash
+pip install ".[server]"
+apex generate "todo API with tests" --name todo
+```
+
+### Public demo (Hugging Face Space)
+
+```bash
+HF_TOKEN=hf_... python scripts/deploy_hf_space.py --space <you>/apex-society
+```
+
+The Space holds **no** provider keys and refuses to start if any are set. Visitors either watch the demo replay or bring their own Groq/OpenRouter/Qwen key, which is scoped to their run and never stored. Each visitor's runs are rate-limited, and sessions and memory are never shared between visitors.
 
 ---
 
 ## Security model
 
-Generated code and model output are treated as untrusted (OWASP LLM05 / LLM06).
+Generated code and model output are untrusted (OWASP LLM05 / LLM06).
 
 | Area | Default |
 |---|---|
-| Network | Binds `127.0.0.1`. Non-loopback binds are refused unless `APEX_API_TOKEN` is set. Put TLS in front for remote use. |
-| Auth | With `APEX_API_TOKEN` set, every `/api/*`, `/mcp/*` route and the WebSocket require `Authorization: Bearer <token>` (or `?token=` for the WebSocket/downloads). Open the dashboard as `http://host:8000/#token=<token>`. |
-| DNS rebinding / CSRF | `Host` header must be in `APEX_ALLOWED_HOSTS`; browser `Origin` must be in `APEX_ALLOWED_ORIGINS`. No wildcard CORS. |
-| Sessions | Each WebSocket only receives events for sessions it started or subscribed to. Session IDs are validated; downloads never follow symlinks. |
-| Cost | `APEX_MAX_CONCURRENT_JOBS` (default 2) and `APEX_MAX_TASK_CHARS` (default 500) bound spend; WebSocket messages are capped at 16 KB. |
-| File writes | Every model-chosen path goes through `core.security.safe_join`: no `..`, absolute, drive/UNC paths, `.git/`, or symlink escapes. Writes are atomic. |
-| Execution | Installing deps, running generated code, auto-starting apps and deploying are **off** unless `APEX_ALLOW_EXECUTION=1` or `approved=True`. No shell; children get a minimal env (no API keys); timeouts kill the whole process group; `npm install --ignore-scripts` by default. This is not an OS sandbox — use a container/VM for untrusted projects. |
-| Agent tools | `python_eval` is literal-only; `web_fetch` blocks private, loopback and cloud-metadata addresses. |
-| Memory | `~/.apex/memory` (override `APEX_MEMORY_DIR`), 0600 files, secrets redacted, file contents never stored, pruned to 500 records / 90 days. |
-
-Run the security regression suite: `python -m pytest tests/test_security.py -v`.
+| Network | Binds `127.0.0.1`; non-loopback needs `APEX_API_TOKEN` (or `APEX_PUBLIC_DEMO=1` with no server keys) |
+| Auth | Bearer token on `/api/*`, `/mcp/*` and the WebSocket when `APEX_API_TOKEN` is set |
+| DNS rebinding / CSRF | `Host` and `Origin` allowlists; no wildcard CORS |
+| File writes | Every model-chosen path goes through `safe_join`: no `..`, absolute paths, `.git/`, or symlink escapes; atomic writes |
+| Running code | **Docker sandbox**: `--network none`, read-only root, `--cap-drop ALL`, `no-new-privileges`, non-root, memory/CPU/PID limits, hard timeout. Dependencies are installed host-side as **wheels only** (no `setup.py` runs), and option lines in generated `requirements.txt` are stripped |
+| Host execution | Off unless `APEX_ALLOW_EXECUTION=1`; no shell, minimal env (no API keys), process-group kill |
+| Agent tools | `python_eval` is literal-only; `web_fetch` blocks private, loopback and metadata IPs |
+| Memory | 0600 files, secrets redacted, no file contents, pruned to 500 records / 90 days |
 
 ---
 
-## Run the Benchmark
+## Configuration
+
+| Variable | Purpose |
+|---|---|
+| `GROQ_API_KEY` / `QWEN_API_KEY` / `OPENROUTER_API_KEY` / `OLLAMA_HOST` | LLM providers (cascade: Qwen → Groq; Ollama local) |
+| `APEX_MODEL` | Pin every agent to one model, e.g. `groq/llama-3.3-70b` |
+| `APEX_PRICES` | JSON USD per 1M tokens, e.g. `{"groq/llama-3.3-70b":{"input":0.59,"output":0.79}}` |
+| `APEX_SANDBOX=docker` | Executor runs projects in Docker and heals from real failures |
+| `APEX_SANDBOX_IMAGE` / `_MEMORY` / `_CPUS` / `_TIMEOUT` | Sandbox limits (default `python:3.12-slim`, 512m, 1 CPU, 120s) |
+| `APEX_SANDBOX_HEAL_ROUNDS` | Sandbox → SelfHealer retries (default 2) |
+| `APEX_API_TOKEN` | Bearer token; required for non-loopback binds |
+| `APEX_HOST` / `APEX_PORT` | Bind address (default `127.0.0.1:8000`) |
+| `APEX_ALLOWED_HOSTS` / `APEX_ALLOWED_ORIGINS` | Host / Origin allowlists (`.hf.space` / `https://*.hf.space` wildcards) |
+| `APEX_PUBLIC_DEMO` / `APEX_RUNS_PER_HOUR` | Public demo mode and its per-visitor run limit |
+| `APEX_MAX_CONCURRENT_JOBS` / `APEX_MAX_TASK_CHARS` | Abuse / cost limits (2 / 500) |
+| `APEX_ALLOW_EXECUTION` | Allow unsandboxed host execution / deploys |
+| `APEX_MEMORY_DIR` | Memory location (default `~/.apex/memory`) |
+
+---
+
+## Project layout
+
+```
+core/
+  orchestrator.py        9-agent pipeline (parallel Planner∥Architect, review loop, sandbox heal loop)
+  agents/base.py         the 7 LLM agents
+  execution/sandbox.py   Executor's Docker sandbox
+  memory/store.py        Memory agent's store (redacted, pruned)
+  ai/provider.py         multi-provider router, per-run BYOK keys
+  telemetry.py           per-agent tokens / cost / latency
+  security.py            path containment, no-shell exec, SSRF guard, redaction
+  web_security.py        host/origin/token checks, rate limiting
+eval/                    30-task harness, independent scoring, bootstrap stats
+apex_mcp.py              MCP server (official SDK; stdio + Streamable HTTP)
+server.py · dashboard.html   FastAPI + WebSocket backend and live dashboard
+mcp_server.py            REST tool API used by the dashboard
+Dockerfile · scripts/deploy_hf_space.py   container + Hugging Face Space deploy
+tests/                   unit, security-boundary, sandbox (real Docker), MCP and demo-mode tests
+```
 
 ```bash
-python benchmark.py
-# Single agent vs agent society — files, quality, Reviewer-flagged issues
+python -m pytest            # sandbox tests run when Docker is available
 ```
 
----
-
-## Project Structure
-
-```
-apex-society/
-├── server.py                 # FastAPI + WebSocket backend
-├── dashboard.html            # Live agent visualization (single file)
-├── benchmark.py              # Single vs society comparison
-├── alibaba_cloud_proof.py    # Alibaba Cloud connection proof
-├── core/
-│   ├── orchestrator.py       # Pipeline + conflict resolution loop
-│   ├── agents/base.py        # 7 LLM agent implementations
-│   ├── security.py           # Path containment, no-shell exec, env allowlist, SSRF guard, redaction
-│   ├── web_security.py       # Host/Origin/token checks for the HTTP + WebSocket servers
-│   ├── ai/provider.py        # Qwen Cloud router + retry logic
-│   └── memory/store.py       # Persistent session memory
-├── tests/test_apex.py        # Core unit tests
-└── tests/test_security.py    # Security-boundary regression tests
-```
-
----
-
-## Environment Variables
-
-| Variable | Required | Description |
-|---|---|---|
-| `QWEN_API_KEY` | ✅ | From home.qwencloud.com/api-keys |
-| `GROQ_API_KEY` | Optional | Free fallback |
-| `APEX_API_TOKEN` | For remote use | Bearer token for the server; required for non-loopback binds |
-| `APEX_HOST` / `APEX_PORT` | Optional | Bind address (default `127.0.0.1:8000`) |
-| `APEX_ALLOWED_HOSTS` / `APEX_ALLOWED_ORIGINS` | Optional | Comma lists for Host and browser Origin checks |
-| `APEX_MAX_CONCURRENT_JOBS` / `APEX_MAX_TASK_CHARS` | Optional | Cost/abuse limits (defaults 2 / 500) |
-| `APEX_ALLOW_EXECUTION` | Optional | `1` to let the engine install deps / run / deploy generated code |
-| `APEX_MEMORY_DIR` | Optional | Memory location (default `~/.apex/memory`) |
-
----
-
-*Built for the Global AI Hackathon Series with Qwen Cloud — Track 3: Agent Society*
-*Submitted by Mahak Fahad — June 2026 | [github.com/mahak867/ai-dev-engine](https://github.com/mahak867/ai-dev-engine)*
+MIT licensed.

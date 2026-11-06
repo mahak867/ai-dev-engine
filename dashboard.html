@@ -21,7 +21,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--m
 /* scanlines */
 body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.04) 2px,rgba(0,0,0,0.04) 4px);pointer-events:none;z-index:9999}
 
-.shell{display:grid;grid-template-rows:auto auto auto 1fr auto;height:100vh;position:relative;z-index:1}
+.shell{display:grid;grid-template-rows:auto auto auto auto 1fr auto;height:100vh;position:relative;z-index:1}
 
 /* header */
 .hdr{
@@ -87,6 +87,14 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .tbtn:hover{border-color:var(--orange);color:var(--orange);background:var(--orange3)}
 .tbtn.prime{border-color:var(--orange);color:var(--orange)}
 .tbtn:disabled{opacity:0.3;cursor:not-allowed}
+.kbar{background:var(--bg1);border-bottom:1px solid var(--b1);padding:5px 14px;display:flex;gap:7px;align-items:center;font-size:9px;color:var(--sub)}
+.kbar select,.kbar input[type=password]{background:#000;border:1px solid var(--b2);color:var(--text);font-family:var(--mono);font-size:10px;padding:3px 6px;outline:none}
+.kbar input[type=password]{flex:0 1 300px}
+.kbar label{display:flex;gap:4px;align-items:center;cursor:pointer}
+.kbar .note{color:var(--dim);margin-left:auto}
+.ut{width:100%;border-collapse:collapse;font-size:9px}
+.ut td,.ut th{padding:2px 4px;text-align:right;border-bottom:1px solid var(--b1)}
+.ut td:first-child,.ut th:first-child{text-align:left}
 .clk{font-size:10px;color:var(--dim);min-width:36px;text-align:right;font-variant-numeric:tabular-nums}
 
 /* main area */
@@ -158,7 +166,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <div class="hdr-left">
     <div class="pac-wrap"><div class="pac-body"></div><div class="pac-eye"></div></div>
     <span class="hdr-title">APEX SOCIETY</span>
-    <span class="hdr-sub">QWEN CLOUD · 9-AGENT SYSTEM</span>
+    <span class="hdr-sub">9-AGENT SYSTEM · MULTI-PROVIDER</span>
   </div>
   <div class="hdr-stats">
     <div class="hstat"><span class="hstat-l">AGENTS</span><span class="hstat-v" id="hsA">0/9</span></div>
@@ -185,6 +193,13 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <button class="tbtn" id="dlBtn" style="display:none;background:#0a1f0d;border-color:#3B6D11;color:#97C459" title="Download generated files as ZIP">⬇ ZIP</button>
   <span class="clk" id="clk">00:00</span>
 </div>
+<div class="kbar" id="kbar">
+  <span>LLM</span>
+  <select id="kprov" title="provider for your key"><option value="groq">Groq (free tier)</option><option value="openrouter">OpenRouter</option><option value="qwen">Qwen / DashScope</option></select>
+  <input id="kkey" type="password" autocomplete="off" spellcheck="false" placeholder="your API key — sent only with your run, never stored"/>
+  <label title="Canned agent outputs through the real pipeline — no key, no cost"><input type="checkbox" id="kreplay"/> demo replay (no key)</label>
+  <span class="note" id="knote">leave empty to use the server's own keys</span>
+</div>
 
 <div class="main">
   <div class="graph-wrap" id="gw">
@@ -208,7 +223,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <div class="si"><span class="sl">AGENTS</span><span class="sv" id="sbA">0/9</span></div>
   <div class="si"><span class="sl">FILES</span><span class="sv" id="sbF">0</span></div>
   <div style="flex:1"></div>
-  <span style="font-size:9px;color:var(--dim)">APEX SOCIETY v1.0 · QWEN CLOUD · press 1-3 to navigate</span>
+  <span style="font-size:9px;color:var(--dim)">APEX SOCIETY v3.1 · 9 AGENTS · press 1-3 to navigate</span>
 </div>
 
 </div><!-- .shell -->
@@ -566,6 +581,7 @@ function _drawFrame(id){
 }
 function _startAnim(id,state){
   const a=agSt[id];
+  if(!a) return; // 'System' and other non-graph sources have no sprite
   if(a.interval){clearInterval(a.interval);a.interval=null;}
   a.state=state;a.frame=0;_drawFrame(id);
   a.interval=setInterval(()=>{a.frame=(a.frame+1)%((ANIM[a.state]||ANIM.idle).length);_drawFrame(id);},ANIM_MS[state]||420);
@@ -617,7 +633,7 @@ function connectWS(){
     if(!wsRetry) wsRetry=setInterval(connectWS,4000);
   };
   ws.onmessage=e=>{
-    try{handleMsg(JSON.parse(e.data))}catch(err){}
+    try{handleMsg(JSON.parse(e.data))}catch(err){console.error('handleMsg failed:',err)}
   };
 }
 let currentSessionId = null;
@@ -626,6 +642,12 @@ function wsSend(d){
   return false;
 }
 function handleMsg(m){
+  if(m.type==='error'){
+    addLog('System','error',m.msg||'error');
+    setStatus('ERROR');stopClock();isRunning=false;
+    document.getElementById('runBtn').disabled=false;
+    return;
+  }
   if(m.type==='session_created'){
     currentSessionId = m.session_id; // keep FULL id for reliable API calls
     document.getElementById('sbSess').textContent=m.session_id.slice(0,8);
@@ -668,8 +690,9 @@ function handleMsg(m){
         document.getElementById('hsQ').textContent=qs+'/100';
         document.getElementById('hsQ').style.color=qs>=85?'var(--green)':qs>=70?'var(--yellow)':'var(--red)';
       } else {
-        document.getElementById('hsQ').textContent='100';
+        document.getElementById('hsQ').textContent='—';
       }
+      if(m.usage) showUsage(m.usage, m.sandbox);
       setStatus('DONE');stopClock();isRunning=false;
       document.getElementById('runBtn').disabled=false;
       // reveal download button now that files exist
@@ -710,6 +733,7 @@ function addDialogue(d){
 // ── node state ─────────────────────────────────────────────────────────────────
 let _nLock={};
 function setN(id,s){
+  if(!agSt[id]) return;
   if(nstate[id]==='rejected'&&s==='running'&&!_nLock[id]){
     _nLock[id]=true;
     setTimeout(()=>{nstate[id]=s;_nLock[id]=false;_startAnim(id,'running');},2000);
@@ -754,6 +778,30 @@ function stopClock(){clearInterval(ticker)}
 const sl=ms=>new Promise(r=>setTimeout(r,ms));
 
 // ── run actions ────────────────────────────────────────────────────────────────
+function runOpts(){
+  const key=(document.getElementById('kkey').value||'').trim();
+  if(document.getElementById('kreplay').checked) return {mode:'replay'};
+  if(key) return {api_key:key, provider:document.getElementById('kprov').value};
+  return {};
+}
+function showUsage(u, sbx){
+  if(!u||!u.by_agent) return;
+  const fmt=n=>(n||0).toLocaleString();
+  const rows=Object.entries(u.by_agent).sort((a,b)=>(b[1].total_tokens||0)-(a[1].total_tokens||0)).map(([a,d])=>
+    `<tr><td>${esc(a)}</td><td>${esc(d.calls)}</td><td>${fmt(d.total_tokens)}</td><td>${esc(d.seconds)}s</td><td>${d.cost_usd==null?'—':'$'+Number(d.cost_usd).toFixed(4)}</td></tr>`).join('');
+  const cost=u.cost_usd==null?'unknown (set APEX_PRICES)':'$'+Number(u.cost_usd).toFixed(4);
+  const sb=sbx?`<div class="sc ${sbx.passed?'sc-good':'sc-bad'}"><div class="sc-t">Sandbox ${sbx.passed?'PASSED':'FAILED'} after ${esc(sbx.attempts)} attempt(s)</div><div class="sc-d">first attempt ${sbx.first_attempt_passed?'passed':'failed — healed from real error output'}</div></div>`:'';
+  document.getElementById('dynT').textContent='COST & TOKENS';
+  document.getElementById('dynB').innerHTML=`${sb}<div style="margin:4px 0 6px;font-size:10px;color:var(--sub)">${fmt(u.total_tokens)} tokens · ${esc(u.calls)} LLM calls · ${esc(u.wall_seconds)}s · ${esc(cost)}${u.estimated_tokens?' · tokens partly estimated':''}</div>
+    <table class="ut"><tr><th>agent</th><th>calls</th><th>tokens</th><th>time</th><th>cost</th></tr>${rows}</table>`;
+}
+fetch('/api/health').then(r=>r.json()).then(h=>{
+  if(h.public_demo){
+    document.getElementById('knote').textContent='public demo: bring your own key, or tick demo replay';
+    document.getElementById('kreplay').checked=true;
+  }
+}).catch(()=>{});
+
 async function doRun(){
   if(isRunning) return;
   const task=document.getElementById('tin').value.trim();
@@ -762,7 +810,7 @@ async function doRun(){
   isRunning=true;document.getElementById('runBtn').disabled=true;
   setStatus('RUNNING');startClock();
 
-  if(!wsSend({action:'run',task})){
+  if(!wsSend(Object.assign({action:'run',task},runOpts()))){
     // demo mode
     const pipe=[
       {a:'Planner',   d:2600,f:0,m:'analyzing requirements'},
@@ -809,7 +857,7 @@ async function doRun(){
       addLog(step.a,'done',step.a==='Coder'?`${fileCnt} files`:step.a==='DocWriter'?'readme done':'done');
       setN(step.a,'done');
     }
-    addLog('System','done',`complete — ${fileCnt} files, 0 vulnerabilities`);
+    addLog('System','done',`offline scripted animation — connect to the server for a real run`);
     document.getElementById('hsQ').textContent='100';
     setStatus('DONE');stopClock();isRunning=false;
     document.getElementById('runBtn').disabled=false;
@@ -818,7 +866,7 @@ async function doRun(){
 
 function doBench(){
   const task=document.getElementById('tin').value.trim();
-  if(!wsSend({action:'benchmark',task})){
+  if(!wsSend(Object.assign({action:'benchmark',task},runOpts()))){
     showBench({single:{time:69.3,files:5,score:91,vulns:1},society:{time:182.9,files:11,score:100,vulns:0}});
   }
 }

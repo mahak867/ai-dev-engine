@@ -62,9 +62,20 @@ def _npx() -> str:
 class Executor:
     """Run install / check / test commands for a generated project."""
 
-    def __init__(self, project_dir: str, timeout: int = 120, allow_execution: bool | None = None):
+    def __init__(self, project_dir: str, timeout: int = 120, allow_execution: bool | None = None,
+                 sandbox=None):
+        """
+        ``sandbox``: a ``DockerSandbox`` (or "auto" to use one when
+        APEX_SANDBOX=docker and Docker is reachable). Sandboxed commands run in a
+        network-less, resource-limited container and do not need
+        ``allow_execution``. Without a sandbox, host execution stays opt-in.
+        """
         self.project_dir = Path(project_dir).resolve()
         self.timeout = timeout
+        if sandbox == "auto":
+            from core.execution.sandbox import DockerSandbox, sandbox_enabled
+            sandbox = DockerSandbox() if sandbox_enabled() else None
+        self.sandbox = sandbox
         self.allow_execution = execution_allowed() if allow_execution is None else allow_execution
 
     # ── helpers ────────────────────────────────────────────────────────────────
@@ -133,6 +144,13 @@ class Executor:
         Run ``cmd`` in the project directory. ``cmd`` is an argv list (preferred)
         or a string that is split with shlex — it is never passed to a shell.
         """
+        if self.sandbox is not None:
+            try:
+                r = self.sandbox.run(self.project_dir, cmd, timeout=self.timeout, env=env_extra)
+            except ValueError as e:
+                return ExecResult("", str(e), -1, 0.0)
+            return ExecResult(stdout=r.stdout, stderr=r.error, returncode=r.returncode,
+                              duration=r.duration, timed_out=r.timed_out)
         if not self.allow_execution:
             return ExecResult(
                 "", str(ExecutionDisabledError(
@@ -156,6 +174,12 @@ class Executor:
             return ExecResult("", str(e), 1, 0)
         if not fpath.is_file():
             return ExecResult("", f"File not found: {filename}", 1, 0)
+        if self.sandbox is not None:
+            rel = fpath.relative_to(self.project_dir).as_posix()
+            if fpath.suffix == ".py":
+                return self.run(["python3", rel])
+            if fpath.suffix in (".js", ".mjs", ".cjs"):
+                return self.run(["node", rel])
         if fpath.suffix == ".py":
             return self.run([sys.executable, str(fpath)])
         if fpath.suffix in (".js", ".mjs", ".cjs"):

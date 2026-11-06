@@ -23,7 +23,7 @@
                        ▼
 ┌─────────────────────────────────────────────────────────────┐
 │          APEX ORCHESTRATOR (core/orchestrator.py)            │
-│   Coordinates 7 agents · Routes context · Emits events     │
+│   Coordinates 9 agents · Routes context · Emits events     │
 └──┬───────────────────────────────────────────────────────┬──┘
    │                                                       │
    │ Sequential pipeline with feedback loops               │

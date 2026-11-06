@@ -3,9 +3,9 @@ APEX v3 — Auto-Heal Pipeline
 Runs → detects errors → heals → retries automatically.
 """
 from __future__ import annotations
-import logging, time
+import logging
 from pathlib import Path
-from core.execution.runner import Executor, ExecResult
+from core.execution.runner import Executor
 from core.security import UnsafePathError, safe_join, write_files_contained
 from core.agents.base import SelfHealerAgent
 from core.ai.provider import LLMProvider
@@ -27,7 +27,7 @@ class AutoHealPipeline:
 
     def __init__(self, project_dir: str, on_event=None, allow_execution: bool | None = None):
         self.project_dir = Path(project_dir).resolve()
-        self.executor    = Executor(project_dir, allow_execution=allow_execution)
+        self.executor    = Executor(project_dir, allow_execution=allow_execution, sandbox="auto")
         self.healer      = SelfHealerAgent(LLMProvider("coding"))
         self.on_event    = on_event or (lambda stage, status, msg: print(f"[{stage}] {status}: {msg}"))
 
