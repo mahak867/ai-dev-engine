@@ -458,7 +458,7 @@ class TestServer:
     def test_ws_bad_json_and_caps(self, client, monkeypatch):
         import server
         started = []
-        monkeypatch.setattr(server, "_start_job", lambda fn, sid, task: started.append(task) or True)
+        monkeypatch.setattr(server, "_start_job", lambda fn, sid, task, *a: started.append(task) or True)
         with client.websocket_connect("ws://localhost:8000/ws") as ws:
             ws.send_text("not json")
             assert json.loads(ws.receive_text())["msg"] == "invalid JSON"
@@ -476,9 +476,9 @@ class TestServer:
             assert "busy" in json.loads(ws.receive_text())["msg"]
 
     def test_events_not_broadcast_to_other_clients(self, client, monkeypatch):
-        import asyncio, server
+        import server
         monkeypatch.setattr(server, "_start_job", lambda *a: True)
-        with client.websocket_connect("ws://localhost:8000/ws") as a, client.websocket_connect("ws://localhost:8000/ws") as b:
+        with client.websocket_connect("ws://localhost:8000/ws") as a, client.websocket_connect("ws://localhost:8000/ws"):
             a.send_text(json.dumps({"action": "run", "task": "secret project"}))
             sid = json.loads(a.receive_text())["session_id"]
             assert server.manager.subscribers[sid] and len(server.manager.subscribers[sid]) == 1

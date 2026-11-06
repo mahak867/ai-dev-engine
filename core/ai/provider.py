@@ -3,9 +3,12 @@ APEX AI Dev Engine v3 — Multi-Provider Router
 Qwen Cloud (primary/hackathon) + Groq (free fallback) + Ollama (local) + optional paid.
 """
 from __future__ import annotations
-import os, json, time, logging
-from typing import Iterator
+import os, json, time, logging, threading, contextvars
+from contextlib import contextmanager
+from typing import Callable, Iterator
 import requests
+
+from core import telemetry
 
 log = logging.getLogger("apex.provider")
 
@@ -42,7 +45,52 @@ MODELS = {
     "together/llama-3.3-70b":    {"provider": "together",   "ctx": 128_000, "free": False},
     "together/deepseek-r1":      {"provider": "together",   "ctx": 163_840, "free": False},
     "mistral/codestral":         {"provider": "mistral",    "ctx": 256_000, "free": False},
+    # ── Deterministic fake (tests / eval self-check only; never in a cascade) ──
+    "fake/canned":               {"provider": "fake",       "ctx": 1_000_000, "free": True},
 }
+
+# ── Per-request API keys (bring-your-own-key) ──────────────────────────────────
+# The hosted demo lets a visitor paste their own key. It is held in a context
+# variable for that one run only — never written to os.environ, disk or logs.
+_key_overrides: contextvars.ContextVar[dict] = contextvars.ContextVar("apex_key_overrides", default={})
+
+
+_model_override: contextvars.ContextVar[str] = contextvars.ContextVar("apex_model_override", default="")
+
+
+@contextmanager
+def api_keys(model: str | None = None, **keys: str):
+    """
+    ``with api_keys(GROQ_API_KEY="gsk_...", model="groq/llama-3.3-70b")``: use
+    these keys (and optionally pin one model) for every call in this context.
+    """
+    clean = {k: v.strip() for k, v in keys.items() if isinstance(v, str) and v.strip()}
+    token = _key_overrides.set({**_key_overrides.get(), **clean})
+    mtoken = _model_override.set(model) if model else None
+    try:
+        yield
+    finally:
+        _key_overrides.reset(token)
+        if mtoken is not None:
+            _model_override.reset(mtoken)
+
+
+def _key(name: str) -> str:
+    return _key_overrides.get().get(name) or os.getenv(name, "")
+
+
+def byok_active() -> bool:
+    return bool(_key_overrides.get())
+
+
+# ── Fake provider hook (tests / `eval --self-test`) ───────────────────────────
+_fake_responder: Callable[[list[dict]], str] | None = None
+
+
+def set_fake_responder(fn: Callable[[list[dict]], str] | None) -> None:
+    """Install a function that answers ``fake/canned`` calls (None to remove)."""
+    global _fake_responder
+    _fake_responder = fn
 
 FREE_MODELS = [m for m, i in MODELS.items() if i["free"]]
 PAID_MODELS = [m for m, i in MODELS.items() if not i["free"]]
@@ -104,15 +152,31 @@ class LLMProvider:
         self.temperature = temperature
         self._session    = requests.Session()
         self._session.headers.update({"Content-Type": "application/json"})
+        self._usage      = threading.local()
 
     # ── Public API ─────────────────────────────────────────────────────────────
     def complete(self, messages: list[dict], max_tokens: int = 8192) -> str:
         for model in self._resolve_cascade():
+            self._usage.value = None
+            t0 = time.time()
             try:
-                return self._call(model, messages, max_tokens, stream=False)
+                out = self._call(model, messages, max_tokens, stream=False)
             except Exception as e:
                 log.warning(f"[{model}] failed: {e}, trying next...")
-        raise RuntimeError("All providers exhausted — check QWEN_API_KEY or GROQ_API_KEY.")
+                if not isinstance(e, KeyError) and "not set" not in str(e):
+                    telemetry.record(model, 0, 0, time.time() - t0, ok=False)
+                continue
+            usage = self._usage.value or {}
+            pt, ct = usage.get("prompt_tokens"), usage.get("completion_tokens")
+            estimated = pt is None or ct is None
+            telemetry.record(
+                model,
+                pt if pt is not None else telemetry.estimate_tokens(messages),
+                ct if ct is not None else telemetry.estimate_tokens(out),
+                time.time() - t0, estimated=estimated,
+            )
+            return out
+        raise RuntimeError("All providers exhausted — set QWEN_API_KEY, GROQ_API_KEY or OLLAMA_HOST.")
 
     def stream(self, messages: list[dict], max_tokens: int = 8192) -> Iterator[str]:
         for model in self._resolve_cascade():
@@ -125,6 +189,11 @@ class LLMProvider:
 
     # ── Cascade resolution ─────────────────────────────────────────────────────
     def _resolve_cascade(self) -> list[str]:
+        # APEX_MODEL pins every agent to one model (used by the eval harness so
+        # single-agent and society runs are compared on the same model).
+        pinned = _model_override.get() or os.getenv("APEX_MODEL", "").strip()
+        if pinned:
+            return [pinned]
         if self.model == "auto":
             base = DEFAULT_CASCADE
         elif self.model == "coding":
@@ -150,11 +219,18 @@ class LLMProvider:
             "openrouter": self._openrouter,
             "together":   self._together,
             "mistral":    self._mistral,
+            "fake":       self._fake,
         }[provider](model, messages, max_tokens, stream)
+
+    def _fake(self, model, messages, max_tokens, stream):
+        if _fake_responder is None:
+            raise RuntimeError("fake provider has no responder installed")
+        out = _fake_responder(messages)
+        return iter([out]) if stream else out
 
     # ── Qwen Cloud (PRIMARY — hackathon requirement) ───────────────────────────
     def _qwen(self, model, messages, max_tokens, stream):
-        key = os.getenv("QWEN_API_KEY", "")
+        key = _key("QWEN_API_KEY")
         if not key:
             raise RuntimeError("QWEN_API_KEY not set — get it from home.qwencloud.com/api-keys")
         model_id = model.split("/", 1)[1]
@@ -165,7 +241,7 @@ class LLMProvider:
 
     # ── Groq (FREE fallback) ───────────────────────────────────────────────────
     def _groq(self, model, messages, max_tokens, stream):
-        key = os.getenv("GROQ_API_KEY", "")
+        key = _key("GROQ_API_KEY")
         if not key:
             raise RuntimeError("GROQ_API_KEY not set — free tier, get it at console.groq.com")
         groq_ids = {
@@ -192,7 +268,10 @@ class LLMProvider:
         r = self._session.post(f"{host}/api/chat", json=payload, stream=stream, timeout=120)
         r.raise_for_status()
         if not stream:
-            return r.json()["message"]["content"]
+            data = r.json()
+            self._usage.value = {"prompt_tokens": data.get("prompt_eval_count"),
+                                 "completion_tokens": data.get("eval_count")}
+            return data["message"]["content"]
         def _gen():
             for line in r.iter_lines():
                 if line:
@@ -205,7 +284,7 @@ class LLMProvider:
 
     # ── OpenRouter (optional paid) ─────────────────────────────────────────────
     def _openrouter(self, model, messages, max_tokens, stream):
-        key = os.getenv("OPENROUTER_API_KEY", "")
+        key = _key("OPENROUTER_API_KEY")
         if not key:
             raise RuntimeError("OPENROUTER_API_KEY not set")
         or_ids = {
@@ -222,7 +301,7 @@ class LLMProvider:
 
     # ── Together AI (optional paid) ────────────────────────────────────────────
     def _together(self, model, messages, max_tokens, stream):
-        key = os.getenv("TOGETHER_API_KEY", "")
+        key = _key("TOGETHER_API_KEY")
         if not key:
             raise RuntimeError("TOGETHER_API_KEY not set")
         together_ids = {
@@ -237,7 +316,7 @@ class LLMProvider:
 
     # ── Mistral (optional paid) ────────────────────────────────────────────────
     def _mistral(self, model, messages, max_tokens, stream):
-        key = os.getenv("MISTRAL_API_KEY", "")
+        key = _key("MISTRAL_API_KEY")
         if not key:
             raise RuntimeError("MISTRAL_API_KEY not set")
         ids = {"codestral": "codestral-latest"}
@@ -271,7 +350,9 @@ class LLMProvider:
                     continue
                 r.raise_for_status()
                 if not stream:
-                    return r.json()["choices"][0]["message"]["content"]
+                    data = r.json()
+                    self._usage.value = data.get("usage") or None
+                    return data["choices"][0]["message"]["content"]
                 def _gen():
                     for line in r.iter_lines():
                         if line and line.startswith(b"data: "):

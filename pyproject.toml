@@ -28,6 +28,7 @@ dependencies = [
 
 [project.scripts]
 apex = "cli:main"
+apex-mcp = "apex_mcp:main"
 
 [project.optional-dependencies]
 # Dashboard / WebSocket server and the MCP-style tool server.
@@ -36,15 +37,27 @@ server = [
     "uvicorn>=0.24,<1",
     "websockets>=12.0",
 ]
+# Official MCP SDK server: `apex-mcp`
+mcp = [
+    "mcp>=1.13,<2",
+]
+# Eval harness scorers
+eval = [
+    "ruff>=0.5",
+    "bandit>=1.7",
+]
 dev = [
     "pytest>=8.0",
     "httpx>=0.27",      # required by fastapi.testclient
+    "mcp>=1.13,<2",
+    "ruff>=0.5",
+    "bandit>=1.7",
     "build>=1.0",
 ]
 
 [tool.setuptools]
 # Top-level modules used by the `apex` entry point and the servers.
-py-modules = ["cli", "server", "mcp_server", "benchmark"]
+py-modules = ["cli", "server", "mcp_server", "apex_mcp", "benchmark"]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -56,3 +69,8 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-p no:cacheprovider --strict-markers"
+
+[tool.ruff]
+# Lowest supported Python — catches 3.12-only syntax (e.g. nested f-string quotes).
+target-version = "py310"
+extend-exclude = ["eval/results"]

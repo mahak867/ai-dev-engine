@@ -16,6 +16,12 @@ Environment:
   APEX_MAX_CONCURRENT_JOBS  generation jobs allowed at once (default 2)
   APEX_MAX_TASK_CHARS       max task prompt length (default 500)
   APEX_MAX_SESSIONS         in-memory session records kept (default 200)
+  APEX_PUBLIC_DEMO          1 = public demo (e.g. Hugging Face Space): visitors bring
+                            their own API key or watch a no-LLM replay; the server
+                            holds no provider keys, shares no sessions or memory
+  APEX_RUNS_PER_HOUR        per-client run limit in public demo mode (default 6)
+  APEX_TRUST_PROXY          1 = take the client IP from X-Forwarded-For
+  APEX_FRAME_ANCESTORS      allow embedding (e.g. "https://huggingface.co")
 """
 from __future__ import annotations
 
@@ -27,6 +33,8 @@ from functools import lru_cache
 from typing import Iterable
 
 LOOPBACK_NAMES = {"localhost", "127.0.0.1", "::1", "[::1]"}
+PROVIDER_KEY_VARS = ("QWEN_API_KEY", "DASHSCOPE_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY",
+                     "TOGETHER_API_KEY", "MISTRAL_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY")
 
 
 def _csv(name: str, default: Iterable[str]) -> list[str]:
@@ -58,6 +66,10 @@ class Settings:
     max_sessions: int = 200
     max_ws_message_bytes: int = 16 * 1024
     max_tool_input_chars: int = 20_000
+    public_demo: bool = False
+    runs_per_hour: int = 6
+    trust_proxy: bool = False
+    frame_ancestors: str = ""
 
     @property
     def auth_required(self) -> bool:
@@ -81,12 +93,23 @@ def get_settings() -> Settings:
         max_concurrent_jobs=max(1, int(os.environ.get("APEX_MAX_CONCURRENT_JOBS", "2"))),
         max_task_chars=max(1, int(os.environ.get("APEX_MAX_TASK_CHARS", "500"))),
         max_sessions=max(1, int(os.environ.get("APEX_MAX_SESSIONS", "200"))),
+        public_demo=os.environ.get("APEX_PUBLIC_DEMO", "") == "1",
+        runs_per_hour=max(1, int(os.environ.get("APEX_RUNS_PER_HOUR", "6"))),
+        trust_proxy=os.environ.get("APEX_TRUST_PROXY", "") == "1",
+        frame_ancestors=os.environ.get("APEX_FRAME_ANCESTORS", "").strip(),
     )
 
 
 def assert_safe_bind(host: str, settings: Settings | None = None) -> None:
     """Refuse to listen beyond loopback unless a token is configured."""
     s = settings or get_settings()
+    if s.public_demo:
+        leaked = [k for k in PROVIDER_KEY_VARS if os.environ.get(k)]
+        if leaked:
+            raise SystemExit(
+                f"APEX_PUBLIC_DEMO=1 but provider keys are set ({', '.join(leaked)}). A public demo must "
+                f"not spend the operator's quota: remove them — visitors bring their own key.")
+        return
     if not is_loopback_host(host) and not s.auth_required:
         raise SystemExit(
             f"Refusing to bind {host!r} without APEX_API_TOKEN. Set a long random token "
@@ -106,14 +129,27 @@ def host_allowed(host_header: str | None, s: Settings) -> bool:
         name = host.rsplit(":", 1)[0] if host.count(":") == 1 else host
     if "*" in s.allowed_hosts:
         return True
-    return name in s.allowed_hosts or name.strip("[]") in s.allowed_hosts
+    if name in s.allowed_hosts or name.strip("[]") in s.allowed_hosts:
+        return True
+    # ".hf.space" / "*.hf.space" entries allow any subdomain of that suffix
+    return any(name.endswith(h.lstrip("*")) and h.lstrip("*").startswith(".")
+               for h in s.allowed_hosts if h.startswith((".", "*.")))
 
 
 def origin_allowed(origin: str | None, s: Settings) -> bool:
     """Absent Origin = non-browser client (curl, MCP client) → allowed; host+token still apply."""
     if origin is None:
         return True
-    return origin.rstrip("/").lower() in s.allowed_origins
+    o = origin.rstrip("/").lower()
+    if o in s.allowed_origins:
+        return True
+    # "https://*.hf.space" entries allow any subdomain over that scheme
+    for a in s.allowed_origins:
+        if "://*." in a:
+            scheme, suffix = a.split("://*", 1)
+            if o.startswith(scheme + "://") and o.endswith(suffix):
+                return True
+    return False
 
 
 def token_ok(presented: str | None, s: Settings) -> bool:
@@ -187,14 +223,51 @@ class SecurityMiddleware:
                 hdrs = list(message.get("headers", []))
                 existing = {k.lower() for k, _ in hdrs}
                 for k, v in SECURITY_HEADERS:
+                    if k == b"x-frame-options" and s.frame_ancestors:
+                        continue
                     if k not in existing:
                         hdrs.append((k, v))
+                if s.frame_ancestors and b"content-security-policy" not in existing:
+                    hdrs.append((b"content-security-policy",
+                                 f"frame-ancestors 'self' {s.frame_ancestors}".encode()))
                 if path.startswith("/api/") and b"cache-control" not in existing:
                     hdrs.append((b"cache-control", b"no-store"))
                 message = {**message, "headers": hdrs}
             await send(message)
 
         return await self.app(scope, receive, send_with_headers)
+
+
+def client_ip(conn, s: Settings | None = None) -> str:
+    s = s or get_settings()
+    if s.trust_proxy:
+        xff = conn.headers.get("x-forwarded-for", "")
+        if xff:
+            return xff.split(",")[0].strip()
+    return conn.client.host if conn.client else "unknown"
+
+
+class RateLimiter:
+    """Sliding one-hour window per key (client IP)."""
+
+    def __init__(self):
+        import threading
+        self._hits: dict[str, list[float]] = {}
+        self._lock = threading.Lock()
+
+    def allow(self, key: str, limit: int, window: float = 3600.0) -> bool:
+        import time
+        now = time.time()
+        with self._lock:
+            hits = [t for t in self._hits.get(key, []) if now - t < window]
+            if len(hits) >= limit:
+                self._hits[key] = hits
+                return False
+            hits.append(now)
+            self._hits[key] = hits
+            if len(self._hits) > 10_000:
+                self._hits = {k: v for k, v in self._hits.items() if v and now - v[-1] < window}
+            return True
 
 
 def ws_reject_reason(websocket, s: Settings | None = None) -> tuple[int, str] | None:

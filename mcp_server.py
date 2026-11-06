@@ -1,12 +1,12 @@
 """
 APEX Society — MCP Server
 =========================
-Exposes the 7 LLM agents (+ a static benchmark summary) as 8 typed tools over
+Exposes the society's 7 LLM agents (+ a static benchmark summary) as 8 typed tools over
 HTTP instead of raw shell commands. Tools only return text; none of them write
 files or run processes.
 
-Note: this is a simple JSON-over-HTTP tool API in the spirit of MCP, not the
-JSON-RPC Streamable HTTP transport from the MCP spec. It applies the spec's
+Note: this is a simple JSON-over-HTTP tool API kept for the dashboard and curl.
+The spec-compliant MCP server (official SDK, stdio + Streamable HTTP) is apex_mcp.py. It applies the spec's
 transport security guidance anyway: loopback bind by default, Host/Origin
 validation against DNS rebinding, and bearer-token auth (core/web_security.py).
 
@@ -22,7 +22,6 @@ load_dotenv()
 
 import json, os, time, logging, threading
 from typing import Any
-from dataclasses import dataclass, asdict
 
 log = logging.getLogger("apex.mcp")
 
@@ -207,8 +206,9 @@ class MCPToolExecutor:
             if tool_name == "run_benchmark":
                 return self._run_benchmark(inputs.get("task", "build a REST API"))
 
+            from core.agent_tools import adapt_inputs
             agent = self.agents[tool_name]
-            result = agent.run(inputs)
+            result = agent.run(adapt_inputs(tool_name, inputs))
 
             return {
                 "tool": tool_name,
@@ -279,7 +279,7 @@ def create_mcp_app():
         return {
             "name": "apex-society",
             "version": "1.1.0",
-            "description": "7 LLM agents exposed as typed tools",
+            "description": "9-agent society; its 7 LLM agents exposed as typed tools",
             "tools": MCP_TOOLS,
             "security": {
                 "note": "Typed tools only; no shell or file-system access is exposed",
