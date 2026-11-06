@@ -2,7 +2,7 @@
 APEX v3 — Full test suite (no API keys required, no network calls)
 Run: python -m pytest tests/ -v
 """
-import pytest, json, os, sys
+import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 

@@ -33,7 +33,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from core import web_security
-from core.web_security import get_settings, ws_reject_reason
+from core.web_security import RateLimiter, client_ip, get_settings, ws_reject_reason
 from mcp_server import MCP_TOOLS, TOOLS_BY_NAME, MCPToolExecutor, validate_tool_inputs
 
 log = logging.getLogger("apex.server")
@@ -44,13 +44,65 @@ SESSION_ID_RE = re.compile(r"^[a-f0-9]{16}$")
 MAX_EVENTS_PER_SESSION = 2000
 SESSION_TTL_SECONDS = 2 * 3600
 LLM_AGENTS = ["Planner", "Architect", "Coder", "Reviewer", "SelfHealer", "Debugger", "DocWriter"]
-PIPELINE_ROLES = LLM_AGENTS + ["Executor", "Memory"]
+TOOL_AGENTS = ["Executor", "Memory"]
+AGENTS = LLM_AGENTS + TOOL_AGENTS  # the 9-agent society
 
 # ── state ──────────────────────────────────────────────────────────────────────
 sessions: dict[str, dict] = {}
 agent_dialogues: dict[str, list] = {}
 _loop: asyncio.AbstractEventLoop | None = None
 _job_slots = threading.BoundedSemaphore(get_settings().max_concurrent_jobs)
+_rate = RateLimiter()
+
+# Bring-your-own-key providers: visitor key -> (env var name, pinned model)
+BYOK_PROVIDERS = {
+    "groq": ("GROQ_API_KEY", "groq/llama-3.3-70b"),
+    "openrouter": ("OPENROUTER_API_KEY", "or/kimi-k2"),
+    "qwen": ("QWEN_API_KEY", "qwen/qwen-plus"),
+}
+_KEY_RE = re.compile(r"^[A-Za-z0-9_\-.]{20,200}$")
+REPLAY_MODEL = "fake/canned"
+
+
+def _install_replay_llm():
+    """Canned outputs for the no-key 'demo replay' — clearly labelled, costs nothing."""
+    from core.ai import provider
+    from core import demo_llm as fake_llm
+    delay = float(os.environ.get("APEX_REPLAY_DELAY", "0.8"))
+
+    def slow(messages):
+        time.sleep(delay)
+        return fake_llm.respond(messages)
+    provider.set_fake_responder(slow)
+
+
+def _llm_context(byok: dict | None):
+    """Context manager that scopes a visitor's key / replay model to one run."""
+    from contextlib import nullcontext
+    from core.ai.provider import api_keys
+    if not byok:
+        return nullcontext()
+    if byok.get("mode") == "replay":
+        return api_keys(model=REPLAY_MODEL)
+    env_name, model = BYOK_PROVIDERS[byok["provider"]]
+    return api_keys(model=model, **{env_name: byok["key"]})
+
+
+def _parse_byok(msg: dict, settings) -> tuple[dict | None, str | None]:
+    """Validate BYOK / replay fields from a run message. Returns (byok, error)."""
+    if msg.get("mode") == "replay":
+        return {"mode": "replay"}, None
+    key = msg.get("api_key")
+    if key:
+        prov = msg.get("provider", "groq")
+        if prov not in BYOK_PROVIDERS:
+            return None, f"provider must be one of {sorted(BYOK_PROVIDERS)}"
+        if not isinstance(key, str) or not _KEY_RE.match(key.strip()):
+            return None, "API key format looks wrong"
+        return {"provider": prov, "key": key.strip()}, None
+    if settings.public_demo:
+        return None, "This public demo has no server-side API key. Paste your own key or tick 'Demo replay'."
+    return None, None
 
 
 class ConnectionManager:
@@ -120,6 +172,7 @@ async def _cleanup_sessions():
 async def lifespan(_app: FastAPI):
     global _loop
     _loop = asyncio.get_running_loop()
+    _install_replay_llm()
     task = asyncio.create_task(_cleanup_sessions())
     try:
         yield
@@ -161,7 +214,7 @@ def _set_status(session_id: str, status: str, **fields):
         s.update(fields)
 
 
-def _start_job(target, *args) -> bool:
+def _start_job(target, *args) -> bool:  # noqa: D401
     """Run ``target`` in a worker thread if a job slot is free."""
     if not _job_slots.acquire(blocking=False):
         return False
@@ -177,7 +230,15 @@ def _start_job(target, *args) -> bool:
 
 
 # ── run agent society ──────────────────────────────────────────────────────────
-def _run_society(session_id: str, task: str):
+def _run_society(session_id: str, task: str, byok: dict | None = None):
+    with _llm_context(byok):
+        _run_society_inner(session_id, task, replay=bool(byok and byok.get("mode") == "replay"))
+
+
+def _run_society_inner(session_id: str, task: str, replay: bool = False):
+    import tempfile
+    from core import telemetry
+    from core.memory.store import MemoryStore
     from core.orchestrator import Orchestrator
 
     t_start = time.time()
@@ -197,15 +258,24 @@ def _run_society(session_id: str, task: str):
                   f"{from_agent} → {to_agent}: {content[:80]}", {"dialogue": entry})
 
     try:
-        orch = Orchestrator(model="auto", on_event=on_event, on_dialogue=on_dialogue)
-        path = orch.generate_fullstack(
-            name=f"apex-{session_id[:8]}",
-            request=task,
-            output_dir=str(RUNS_DIR / session_id),
-        )
+        if replay:
+            sync_emit(session_id, "System", "running",
+                      "DEMO REPLAY — canned agent outputs, no LLM is called. Paste a key for a real run.")
+        # Public demo / replay: a throwaway memory store, so one visitor's request
+        # text is never injected into another visitor's prompts.
+        store = MemoryStore(tempfile.mkdtemp(prefix="apex-mem-")) if (get_settings().public_demo or replay) else None
+        tracker = telemetry.UsageTracker()
+        with telemetry.track(tracker):
+            orch = Orchestrator(model="auto", on_event=on_event, on_dialogue=on_dialogue, memory_store=store)
+            path = orch.generate_fullstack(
+                name=f"apex-{session_id[:8]}",
+                request=task,
+                output_dir=str(RUNS_DIR / session_id),
+            )
         file_count = sum(1 for f in Path(path).rglob("*") if f.is_file())
-        sync_emit(session_id, "System", "done", f"complete — {file_count} files generated", {"files": file_count})
-        _set_status(session_id, "done", files=file_count)
+        usage = tracker.summary()
+        _set_status(session_id, "done", files=file_count, usage={k: usage[k] for k in (
+            "calls", "total_tokens", "cost_usd", "llm_seconds", "wall_seconds")}, replay=replay)
     except Exception as e:
         log.exception("society run %s failed", session_id)
         sync_emit(session_id, "System", "error", f"error: {type(e).__name__}")
@@ -213,7 +283,12 @@ def _run_society(session_id: str, task: str):
 
 
 # ── run benchmark ──────────────────────────────────────────────────────────────
-def _run_benchmark(session_id: str, task: str):
+def _run_benchmark(session_id: str, task: str, byok: dict | None = None):
+    with _llm_context(byok):
+        _run_benchmark_inner(session_id, task)
+
+
+def _run_benchmark_inner(session_id: str, task: str):
     t_start = time.time()
     _set_status(session_id, "benchmarking")
     sync_emit(session_id, "System", "running", "starting benchmark — single vs society")
@@ -307,10 +382,22 @@ async def websocket_endpoint(ws: WebSocket):
                     continue
                 # Cap prompt size for both actions to bound token spend.
                 task = task.strip()[: settings.max_task_chars]
+                byok, err = _parse_byok(msg, settings)
+                if err:
+                    await _ws_send(ws, {"type": "error", "msg": err})
+                    continue
+                if action == "benchmark" and byok and byok.get("mode") == "replay":
+                    await _ws_send(ws, {"type": "error", "msg": "Benchmark needs a real API key."})
+                    continue
+                if settings.public_demo and not (byok and byok.get("mode") == "replay") and \
+                        not _rate.allow(client_ip(ws, settings), settings.runs_per_hour):
+                    await _ws_send(ws, {"type": "error",
+                                        "msg": f"Rate limit: {settings.runs_per_hour} runs per hour. Try later."})
+                    continue
                 session_id = _new_session(task, action)
                 manager.subscribe(session_id, ws)
                 target = _run_society if action == "run" else _run_benchmark
-                if not _start_job(target, session_id, task):
+                if not _start_job(target, session_id, task, byok):
                     _set_status(session_id, "rejected")
                     await _ws_send(ws, {"type": "error", "session_id": session_id,
                                         "msg": "Server busy — too many jobs running. Try again shortly."})
@@ -326,6 +413,9 @@ async def websocket_endpoint(ws: WebSocket):
                     await _ws_send(ws, {"type": "error", "msg": "unknown session"})
 
             elif action == "list_sessions":
+                if settings.public_demo:
+                    await _ws_send(ws, {"type": "sessions", "sessions": []})
+                    continue
                 await _ws_send(ws, {
                     "type": "sessions",
                     "sessions": [
@@ -371,7 +461,13 @@ def _iter_files(root: Path):
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok"}
+    s = get_settings()
+    return {"status": "ok", "public_demo": s.public_demo, "byok_providers": sorted(BYOK_PROVIDERS),
+            "auth_required": s.auth_required}
+
+
+def _demo_forbidden():
+    return JSONResponse({"error": "disabled in the public demo"}, status_code=403)
 
 
 @app.get("/api/sessions/{session_id}/files")
@@ -408,6 +504,8 @@ async def download_session(session_id: str):
 @app.get("/api/memory/stats")
 async def memory_stats():
     """Past-run stats for the dashboard Memory tab."""
+    if get_settings().public_demo:
+        return {"stats": {"total_runs": 0}, "projects": [], "note": "memory is per-run in the public demo"}
     from core.memory.store import MemoryStore
     store = MemoryStore()
     return {"stats": store.get_stats(), "projects": store.list_projects()[:20]}
@@ -421,7 +519,7 @@ async def society_stats():
     live measurement — it is labelled as such.
     """
     from core.memory.store import MemoryStore
-    projects = MemoryStore().list_projects()
+    projects = [] if get_settings().public_demo else MemoryStore().list_projects()
     total_files = sum(p.get("file_count", 0) for p in projects)
     scores = [p["quality_score"] for p in projects if p.get("quality_score", 0) > 0]
     avg = round(sum(scores) / len(scores)) if scores else 0
@@ -433,9 +531,9 @@ async def society_stats():
             "total_files_generated": total_files,
             "avg_quality_score": avg,
             "best_quality_score": max(scores) if scores else 0,
+            "agents": len(AGENTS),
             "llm_agents": len(LLM_AGENTS),
-            "pipeline_roles": len(PIPELINE_ROLES),
-            "agents": len(LLM_AGENTS),
+            "tool_agents": len(TOOL_AGENTS),
             "conflict_resolution_rounds_max": 3,
         },
         "single_agent_baseline": baseline,
@@ -450,6 +548,8 @@ async def society_stats():
 
 @app.get("/api/sessions")
 async def list_sessions():
+    if get_settings().public_demo:
+        return _demo_forbidden()
     return {"sessions": [
         {k: v for k, v in s.items() if k != "events"} | {"event_count": len(s["events"])}
         for s in sessions.values()
@@ -487,7 +587,7 @@ async def mcp_list_tools():
 @app.get("/mcp/schema")
 async def mcp_schema():
     return {"name": "apex-society", "version": "1.1.0",
-            "description": f"{len(LLM_AGENTS)} LLM agents exposed as typed tools",
+            "description": f"{len(AGENTS)}-agent society; its {len(LLM_AGENTS)} LLM agents exposed as typed tools",
             "tools": MCP_TOOLS}
 
 
@@ -496,6 +596,8 @@ async def mcp_call_tool(tool_name: str, inputs: dict = Body(...)):
     err = validate_tool_inputs(tool_name, inputs)
     if err:
         return JSONResponse({"error": err, "available": list(TOOLS_BY_NAME)}, status_code=400)
+    if get_settings().public_demo and tool_name != "run_benchmark":
+        return _demo_forbidden()
     if not _job_slots.acquire(blocking=False):
         return JSONResponse({"error": "busy — too many concurrent jobs"}, status_code=429)
     try:
