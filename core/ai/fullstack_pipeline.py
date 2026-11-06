@@ -254,7 +254,9 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'sqlite:///app.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {{'pool_recycle': 300, 'pool_pre_ping': True}}
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-change-in-production')
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+    if not SECRET_KEY:
+        raise RuntimeError('SECRET_KEY environment variable is required')
     CORS_ORIGINS = os.environ.get('CORS_ORIGINS', 'http://localhost:5173,http://localhost:3000').split(',')
     # Fix Render/Railway postgres:// -> postgresql://
     if SQLALCHEMY_DATABASE_URI and SQLALCHEMY_DATABASE_URI.startswith('postgres://'):
@@ -286,7 +288,8 @@ def create_app():
     return app
 app = create_app()
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Never ship the Werkzeug debugger on: it allows remote code execution.
+    app.run(debug=os.environ.get('FLASK_DEBUG') == '1', host=os.environ.get('HOST', '127.0.0.1'), port=int(os.environ.get('PORT', 5000)))
 
 FILE 4: backend/utils/helpers.py (auth helpers)
 {auth_helpers}
