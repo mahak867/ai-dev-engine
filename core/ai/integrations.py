@@ -192,7 +192,7 @@ Frontend upload component:
 REALTIME (Socket.IO):
 Backend (app.py addition):
   from flask_socketio import SocketIO, emit, join_room, leave_room
-  socketio = SocketIO(app, cors_allowed_origins="*")
+  socketio = SocketIO(app, cors_allowed_origins=os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(","))
 
   @socketio.on('join')
   def on_join(data): join_room(data['room'])
@@ -202,7 +202,7 @@ Backend (app.py addition):
       emit('message', data, room=data['room'])
 
   if __name__ == '__main__':
-      socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+      socketio.run(app, debug=os.environ.get('FLASK_DEBUG') == '1', host=os.environ.get('HOST', '127.0.0.1'), port=int(os.environ.get('PORT', 5000)))
 
 Frontend (hooks/useSocket.js):
   import { useEffect, useRef } from 'react'

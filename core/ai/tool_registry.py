@@ -2,16 +2,24 @@
 # 19 permission-gated tools for the APEX agent
 # Pattern from claw-code: independently sandboxed tools with configurable access controls
 
-import os
-import subprocess
+import ast
 import json
+import os
 import re
+import shlex
+import sys
 from pathlib import Path
 from typing import Optional
 
+from core.security import UnsafePathError, check_public_url, run_argv, safe_join, safe_write_text
 
-class PermissionError(Exception):
+
+class ToolPermissionError(Exception):
     pass
+
+
+# Backward-compatible alias (this used to shadow the builtin PermissionError).
+PermissionError = ToolPermissionError  # noqa: A001
 
 
 class ToolRegistry:
@@ -68,17 +76,19 @@ class ToolRegistry:
         tool = self.TOOLS.get(tool_name, {})
         required = tool.get("permission", "")
         if required and required not in self.permissions:
-            raise PermissionError(
+            raise ToolPermissionError(
                 f"Tool '{tool_name}' requires permission '{required}'. "
                 f"Granted: {self.permissions}"
             )
 
     def _safe_path(self, path: str) -> Path:
-        """Ensure path is within project directory."""
-        p = (self.project_path / path).resolve()
-        if not str(p).startswith(str(self.project_path.resolve())):
-            raise PermissionError(f"Path '{path}' is outside project directory")
-        return p
+        """Ensure path is within project directory (canonical, symlink-aware)."""
+        if path in ("", "."):
+            return self.project_path.resolve()
+        try:
+            return safe_join(self.project_path, path)
+        except UnsafePathError as e:
+            raise ToolPermissionError(f"Path '{path}' is outside project directory: {e}") from e
 
     def call(self, tool_name: str, **kwargs) -> str:
         """Execute a tool and return result as string."""
@@ -91,7 +101,7 @@ class ToolRegistry:
 
         try:
             return fn(**kwargs)
-        except PermissionError:
+        except ToolPermissionError:
             raise
         except Exception as e:
             return f"Error: {e}"
@@ -108,9 +118,8 @@ class ToolRegistry:
         return "\n".join(lines)
 
     def _tool_write_file(self, path: str, content: str) -> str:
-        p = self._safe_path(path)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content, encoding="utf-8")
+        self._safe_path(path)
+        safe_write_text(self.project_path, path, content)
         return f"Written: {path} ({len(content)} chars)"
 
     def _tool_list_dir(self, path: str = ".") -> str:
@@ -132,50 +141,69 @@ class ToolRegistry:
         for f in p.rglob("*"):
             if any(skip in str(f) for skip in ["node_modules", "__pycache__", ".git"]):
                 continue
+            if len(pattern) > 200:
+                return "Error: pattern too long"
             if re.search(pattern, f.name, re.IGNORECASE):
                 results.append(str(f.relative_to(self.project_path)))
         return "\n".join(results[:50]) or "No files found"
 
     def _tool_delete_file(self, path: str) -> str:
         p = self._safe_path(path)
+        if p == self.project_path.resolve() or p.is_dir():
+            return f"Error: refusing to delete directory: {path}"
         if p.exists():
             p.unlink()
             return f"Deleted: {path}"
         return f"File not found: {path}"
 
-    def _tool_bash(self, command: str, cwd: str = ".") -> str:
+    def _run(self, argv: list[str], cwd: str = ".", timeout: int = 60) -> str:
         work_dir = self._safe_path(cwd)
-        result = subprocess.run(
-            command, shell=True, cwd=str(work_dir),
-            capture_output=True, text=True, timeout=60,
-            encoding="utf-8", errors="replace"
-        )
-        output = result.stdout + result.stderr
-        return output[:2000] if output else "(no output)"
+        r = run_argv(argv, work_dir, timeout=timeout)
+        output = (r.stdout or "") + (f"\n{r.error}" if r.error else "")
+        return output[:2000] if output.strip() else "(no output)"
+
+    def _tool_bash(self, command, cwd: str = ".") -> str:
+        # No shell: pipes, redirects, `;`, `&&` and $(...) are NOT interpreted.
+        # The command is split into argv with shlex and executed directly with a
+        # minimal environment (no API keys) and a process-group timeout.
+        try:
+            if isinstance(command, (list, tuple)):
+                argv = [str(c) for c in command]
+            else:
+                argv = shlex.split(command, posix=os.name != "nt")
+        except ValueError as e:
+            return f"Error: could not parse command: {e}"
+        if not argv:
+            return "Error: empty command"
+        return self._run(argv, cwd)
 
     def _tool_python_eval(self, code: str) -> str:
-        # Restricted eval - only safe operations
-        restricted = ["import os", "import sys", "subprocess", "open(", "__import__"]
-        if any(r in code for r in restricted):
-            return "Error: Restricted operation"
+        # Literal evaluation only. The previous eval() + substring blocklist was
+        # bypassable (e.g. via ().__class__.__subclasses__()) => arbitrary code.
+        if len(code) > 10_000:
+            return "Error: expression too long"
         try:
-            result = eval(code)
-            return str(result)
-        except Exception as e:
-            return f"Error: {e}"
+            return str(ast.literal_eval(code))
+        except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError) as e:
+            return f"Error: only Python literals are supported ({type(e).__name__})"
 
     def _tool_git_status(self) -> str:
-        return self._tool_bash("git status --short")
+        return self._run(["git", "status", "--short"])
 
     def _tool_git_diff(self, file: str = "") -> str:
-        return self._tool_bash(f"git diff {file}")
+        argv = ["git", "diff"]
+        if file:
+            self._safe_path(file)
+            argv += ["--", file]
+        return self._run(argv)
 
     def _tool_git_commit(self, message: str) -> str:
-        self._tool_bash("git add -A")
-        return self._tool_bash(f'git commit -m "{message}"')
+        self._run(["git", "add", "-A"])
+        # message is a single argv element, so quotes/backticks cannot escape.
+        return self._run(["git", "commit", "-m", message[:2000]])
 
     def _tool_git_push(self) -> str:
-        return self._tool_bash("git push")
+        return self._run(["git", "push"], timeout=120)
 
     def _tool_web_search(self, query: str) -> str:
         # Simple DuckDuckGo instant answer
@@ -192,8 +220,18 @@ class ToolRegistry:
     def _tool_web_fetch(self, url: str) -> str:
         import urllib.request
         try:
-            with urllib.request.urlopen(url, timeout=10) as r:
-                content = r.read().decode("utf-8", errors="ignore")
+            # SSRF guard: public http(s) only — blocks localhost, private LANs
+            # and cloud metadata (169.254.169.254). Redirects are re-checked.
+            check_public_url(url)
+
+            class _SafeRedirect(urllib.request.HTTPRedirectHandler):
+                def redirect_request(self, req, fp, code, msg, headers, newurl):
+                    check_public_url(newurl)
+                    return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+            opener = urllib.request.build_opener(_SafeRedirect)
+            with opener.open(url, timeout=10) as r:
+                content = r.read(1_000_000).decode("utf-8", errors="ignore")
                 # Strip HTML tags
                 content = re.sub(r"<[^>]+>", "", content)
                 return content[:2000]
@@ -232,10 +270,12 @@ class ToolRegistry:
         return f"OK: {path} - not a Python file"
 
     def _tool_run_tests(self, path: str = "backend") -> str:
-        return self._tool_bash("python -m pytest tests/ -v --tb=short 2>&1 | head -50", cwd=path)
+        out = self._run([sys.executable, "-m", "pytest", "tests/", "-v", "--tb=short"], cwd=path, timeout=300)
+        return "\n".join(out.splitlines()[:50])
 
     def _tool_install_deps(self, path: str = "backend") -> str:
-        return self._tool_bash("pip install -r requirements.txt -q", cwd=path)
+        return self._run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "-q"],
+                         cwd=path, timeout=600)
 
     def available_tools(self) -> list:
         """Return tools the current permissions allow."""
