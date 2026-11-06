@@ -1,35 +1,50 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "apex-ai-dev-engine"
-version = "3.0.0"
+version = "3.1.0"
 description = "APEX AI Dev Engine v3 — multi-agent, self-healing, free-model-first app generator"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
 keywords = ["ai", "code-generation", "multi-agent", "llm", "groq", "ollama"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
+# Core runtime (CLI + agents). Keep in sync with requirements.txt.
 dependencies = [
-    "requests>=2.31",
+    "requests>=2.31,<3",
+    "python-dotenv>=1.0.0,<2",
 ]
 
 [project.scripts]
 apex = "cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
-web = ["flask>=3.0"]
+# Dashboard / WebSocket server and the MCP-style tool server.
+server = [
+    "fastapi>=0.110,<1",
+    "uvicorn>=0.24,<1",
+    "websockets>=12.0",
+]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",      # required by fastapi.testclient
+    "build>=1.0",
+]
+
+[tool.setuptools]
+# Top-level modules used by the `apex` entry point and the servers.
+py-modules = ["cli", "server", "mcp_server", "benchmark"]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -40,3 +55,4 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+addopts = "-p no:cacheprovider --strict-markers"

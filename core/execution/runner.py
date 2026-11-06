@@ -1,12 +1,33 @@
 """
-APEX v3 — Safe Code Executor
-Runs generated code in sandboxed subprocess, captures output,
-feeds errors back to SelfHealer automatically.
+APEX v3 — Code Executor
+
+Runs install / type-check / lint / test / build steps for a generated project
+and returns captured output for the SelfHealer.
+
+Safety model (see core/security.py):
+  * Disabled unless explicitly approved: ``Executor(..., allow_execution=True)``
+    or ``APEX_ALLOW_EXECUTION=1``. Generated code is untrusted.
+  * No shell. Commands are argv lists; strings are split with shlex, so
+    ``; rm -rf ~`` is passed as literal arguments, not interpreted.
+  * Minimal environment: provider API keys and other secrets in the parent
+    process are not inherited by children.
+  * Timeouts kill the whole process group, not just the direct child.
+  * npm lifecycle scripts are skipped by default (``--ignore-scripts``);
+    set ``APEX_ALLOW_INSTALL_SCRIPTS=1`` to allow them.
+
+This is NOT an OS sandbox. Run untrusted projects inside a container/VM.
 """
 from __future__ import annotations
-import subprocess, os, sys, time, signal, tempfile, shutil
-from pathlib import Path
+
+import json
+import sys
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Sequence
+
+from core.security import (
+    ExecutionDisabledError, env_flag, execution_allowed, minimal_env, run_argv, safe_join,
+)
 
 
 @dataclass
@@ -25,30 +46,55 @@ class ExecResult:
     def error_summary(self) -> str:
         if self.timed_out:
             return "Process timed out"
-        lines = (self.stderr or "").strip().splitlines()
+        text = self.stderr or self.stdout or ""
+        lines = text.strip().splitlines()
         return "\n".join(lines[-20:]) if lines else ""
 
 
-class Executor:
-    """Run shell commands, npm/python installs, test suites."""
+def _npm() -> str:
+    return "npm.cmd" if sys.platform == "win32" else "npm"
 
-    def __init__(self, project_dir: str, timeout: int = 120):
-        self.project_dir = Path(project_dir)
-        self.timeout     = timeout
+
+def _npx() -> str:
+    return "npx.cmd" if sys.platform == "win32" else "npx"
+
+
+class Executor:
+    """Run install / check / test commands for a generated project."""
+
+    def __init__(self, project_dir: str, timeout: int = 120, allow_execution: bool | None = None):
+        self.project_dir = Path(project_dir).resolve()
+        self.timeout = timeout
+        self.allow_execution = execution_allowed() if allow_execution is None else allow_execution
+
+    # ── helpers ────────────────────────────────────────────────────────────────
+    def _scripts(self) -> dict:
+        pkg = self.project_dir / "package.json"
+        if not pkg.is_file():
+            return {}
+        try:
+            data = json.loads(pkg.read_text(encoding="utf-8"))
+            scripts = data.get("scripts", {})
+            return scripts if isinstance(scripts, dict) else {}
+        except (ValueError, OSError):
+            return {}
 
     # ── Install dependencies ───────────────────────────────────────────────────
     def install_deps(self) -> ExecResult:
         """Auto-detect and install deps (npm / pip / both)."""
         results = []
         if (self.project_dir / "package.json").exists():
-            results.append(self.run("npm install --prefer-offline 2>&1"))
+            argv = [_npm(), "install", "--prefer-offline", "--no-audit", "--no-fund"]
+            if not env_flag("APEX_ALLOW_INSTALL_SCRIPTS"):
+                argv.append("--ignore-scripts")
+            results.append(self.run(argv))
         if (self.project_dir / "requirements.txt").exists():
             results.append(self.run(
-                f"{sys.executable} -m pip install -r requirements.txt -q 2>&1"
+                [sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "-q",
+                 "--disable-pip-version-check"]
             ))
         if not results:
             return ExecResult("No deps file found", "", 0, 0)
-        # return last result (fail if any failed)
         for r in results:
             if not r.ok:
                 return r
@@ -58,76 +104,60 @@ class Executor:
     def type_check(self) -> ExecResult:
         if not (self.project_dir / "tsconfig.json").exists():
             return ExecResult("No tsconfig.json", "", 0, 0)
-        return self.run("npx --yes tsc --noEmit 2>&1")
+        # --no-install: never fetch an arbitrary package just to type-check.
+        return self.run([_npx(), "--no-install", "tsc", "--noEmit"])
 
     # ── Lint ───────────────────────────────────────────────────────────────────
     def lint(self) -> ExecResult:
-        pkg = self.project_dir / "package.json"
-        if pkg.exists():
-            import json
-            scripts = json.loads(pkg.read_text()).get("scripts", {})
-            if "lint" in scripts:
-                return self.run("npm run lint 2>&1")
+        if "lint" in self._scripts():
+            return self.run([_npm(), "run", "lint"])
         return ExecResult("No lint script", "", 0, 0)
 
     # ── Run tests ──────────────────────────────────────────────────────────────
     def test(self) -> ExecResult:
-        if (self.project_dir / "pytest.ini").exists() or \
-           (self.project_dir / "tests").exists():
-            return self.run(f"{sys.executable} -m pytest -x -q 2>&1")
-        pkg = self.project_dir / "package.json"
-        if pkg.exists():
-            import json
-            scripts = json.loads(pkg.read_text()).get("scripts", {})
-            if "test" in scripts:
-                return self.run("npm test -- --watchAll=false 2>&1")
+        if (self.project_dir / "pytest.ini").exists() or (self.project_dir / "tests").exists():
+            return self.run([sys.executable, "-m", "pytest", "-x", "-q"])
+        if "test" in self._scripts():
+            return self.run([_npm(), "test", "--", "--watchAll=false"])
         return ExecResult("No test runner found", "", 0, 0)
 
     # ── Build ──────────────────────────────────────────────────────────────────
     def build(self) -> ExecResult:
-        pkg = self.project_dir / "package.json"
-        if pkg.exists():
-            import json
-            scripts = json.loads(pkg.read_text()).get("scripts", {})
-            if "build" in scripts:
-                return self.run("npm run build 2>&1")
+        if "build" in self._scripts():
+            return self.run([_npm(), "run", "build"])
         return ExecResult("No build script", "", 0, 0)
 
     # ── Generic run ────────────────────────────────────────────────────────────
-    def run(self, cmd: str, env_extra: dict | None = None) -> ExecResult:
-        env = {**os.environ, **(env_extra or {})}
-        # Set CI=true to prevent interactive prompts
-        env["CI"] = "true"
-        env["NEXT_TELEMETRY_DISABLED"] = "1"
-
-        t0 = time.time()
-        try:
-            proc = subprocess.Popen(
-                cmd, shell=True, cwd=str(self.project_dir),
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                env=env, text=True,
+    def run(self, cmd: str | Sequence[str], env_extra: dict | None = None) -> ExecResult:
+        """
+        Run ``cmd`` in the project directory. ``cmd`` is an argv list (preferred)
+        or a string that is split with shlex — it is never passed to a shell.
+        """
+        if not self.allow_execution:
+            return ExecResult(
+                "", str(ExecutionDisabledError(
+                    "Executor is disabled. Pass allow_execution=True or set APEX_ALLOW_EXECUTION=1.")),
+                -1, 0.0,
             )
-            try:
-                stdout, _ = proc.communicate(timeout=self.timeout)
-                return ExecResult(
-                    stdout=stdout, stderr="",
-                    returncode=proc.returncode,
-                    duration=time.time() - t0,
-                )
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.communicate()
-                return ExecResult("", "Timed out", -1, time.time()-t0, timed_out=True)
-        except Exception as e:
-            return ExecResult("", str(e), -1, time.time()-t0)
+        try:
+            r = run_argv(cmd, self.project_dir, timeout=self.timeout, env=minimal_env(env_extra))
+        except ValueError as e:
+            return ExecResult("", str(e), -1, 0.0)
+        return ExecResult(
+            stdout=r.stdout, stderr=r.error, returncode=r.returncode,
+            duration=r.duration, timed_out=r.timed_out,
+        )
 
     # ── Run file directly ──────────────────────────────────────────────────────
     def run_file(self, filename: str) -> ExecResult:
-        fpath = self.project_dir / filename
-        if not fpath.exists():
+        try:
+            fpath = safe_join(self.project_dir, filename)
+        except ValueError as e:
+            return ExecResult("", str(e), 1, 0)
+        if not fpath.is_file():
             return ExecResult("", f"File not found: {filename}", 1, 0)
-        if filename.endswith(".py"):
-            return self.run(f"{sys.executable} {filename}")
-        if filename.endswith(".js") or filename.endswith(".ts"):
-            return self.run(f"node {filename}")
+        if fpath.suffix == ".py":
+            return self.run([sys.executable, str(fpath)])
+        if fpath.suffix in (".js", ".mjs", ".cjs"):
+            return self.run(["node", str(fpath)])
         return ExecResult("", f"Unknown file type: {filename}", 1, 0)

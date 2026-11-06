@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging, time
 from pathlib import Path
 from core.execution.runner import Executor, ExecResult
+from core.security import UnsafePathError, safe_join, write_files_contained
 from core.agents.base import SelfHealerAgent
 from core.ai.provider import LLMProvider
 
@@ -24,9 +25,9 @@ class AutoHealPipeline:
     If any step fails → send to SelfHealer → patch files → retry.
     """
 
-    def __init__(self, project_dir: str, on_event=None):
-        self.project_dir = Path(project_dir)
-        self.executor    = Executor(project_dir)
+    def __init__(self, project_dir: str, on_event=None, allow_execution: bool | None = None):
+        self.project_dir = Path(project_dir).resolve()
+        self.executor    = Executor(project_dir, allow_execution=allow_execution)
         self.healer      = SelfHealerAgent(LLMProvider("coding"))
         self.on_event    = on_event or (lambda stage, status, msg: print(f"[{stage}] {status}: {msg}"))
 
@@ -93,9 +94,9 @@ class AutoHealPipeline:
 
         files = {}
         for fpath in file_errors:
-            full = self.project_dir / fpath
-            if full.exists():
-                files[fpath] = full.read_text(encoding="utf-8")
+            full = self._contained(fpath)
+            if full and full.is_file():
+                files[fpath] = full.read_text(encoding="utf-8", errors="replace")
 
         error_msg = "\n".join(
             f"{f}: {', '.join(errs)}" for f, errs in file_errors.items()
@@ -103,12 +104,8 @@ class AutoHealPipeline:
         self._emit("SelfHealer", "running", f"Fixing {len(files)} files with TS errors...")
         result = self.healer.heal(files, f"TypeScript errors:\n{error_msg}")
 
-        patched = 0
-        for fpath, content in result.files.items():
-            full = self.project_dir / fpath
-            full.parent.mkdir(parents=True, exist_ok=True)
-            full.write_text(content, encoding="utf-8")
-            patched += 1
+        written, _ = write_files_contained(self.project_dir, result.files, log)
+        patched = len(written)
 
         self._emit("SelfHealer", "done", f"Patched {patched} files")
         return patched > 0
@@ -119,10 +116,7 @@ class AutoHealPipeline:
             files = self._read_relevant_files(error)
             result = self.healer.heal(files, error)
             if result.files:
-                for fpath, content in result.files.items():
-                    full = self.project_dir / fpath
-                    full.parent.mkdir(parents=True, exist_ok=True)
-                    full.write_text(content, encoding="utf-8")
+                write_files_contained(self.project_dir, result.files, log)
                 # retry
                 r = getattr(self.executor, stage, self.executor.install_deps)()
                 if r.ok:
@@ -136,13 +130,21 @@ class AutoHealPipeline:
         import re
         files = {}
         for m in re.finditer(r"([\w./\-]+\.\w+)", error):
-            fpath = self.project_dir / m.group(1)
-            if fpath.exists() and fpath.is_file():
+            # Error text is untrusted: never let it pull files from outside
+            # the project (e.g. "/etc/passwd" or "../../.env") into a prompt.
+            fpath = self._contained(m.group(1))
+            if fpath and fpath.is_file():
                 try:
                     files[m.group(1)] = fpath.read_text(encoding="utf-8")
                 except Exception:
                     pass
         return files
+
+    def _contained(self, rel: str):
+        try:
+            return safe_join(self.project_dir, rel)
+        except UnsafePathError:
+            return None
 
     def _emit(self, stage: str, status: str, msg: str):
         log.info(f"[{stage}] {status}: {msg}")
