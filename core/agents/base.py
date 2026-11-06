@@ -1,12 +1,16 @@
 """
-APEX v3 — Multi-Agent System
-Agents: Planner, Architect, Coder, Reviewer, Debugger, SelfHealer, DocWriter
+APEX v3 — Multi-Agent System (9 agents)
+
+LLM agents (this module): Planner, Architect, Coder, Reviewer, SelfHealer,
+Debugger, DocWriter. Tool agents: Executor (core/execution — sandboxed build &
+test) and Memory (core/memory — cross-run learning).
 """
 from __future__ import annotations
 import re, json, logging, time
 from dataclasses import dataclass, field
-from typing import Iterator, Any
+from typing import Iterator
 from core.ai.provider import LLMProvider
+from core import telemetry
 
 log = logging.getLogger("apex.agents")
 
@@ -35,6 +39,17 @@ class Agent:
 
     def __init__(self, provider: LLMProvider | None = None):
         self.llm = provider or LLMProvider(self.model_profile)
+
+    # Attribute every LLM call made inside these methods to this agent, so the
+    # usage tracker can report tokens / cost / latency per agent.
+    _SCOPED_METHODS = ("run", "heal", "revise")
+
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        for meth in cls._SCOPED_METHODS:
+            fn = cls.__dict__.get(meth)
+            if fn is not None and not getattr(fn, "__apex_scoped__", False):
+                setattr(cls, meth, telemetry.agent_run()(fn))
 
     def run(self, context: dict) -> AgentResult:
         raise NotImplementedError
@@ -65,7 +80,6 @@ class Agent:
         # whatever plain text appears in the ~150 chars immediately before
         # the fence (covers "**file.ts**\n```" and "File: file.ts\n```").
         block_pattern = r"```(\w*)\n(.*?)```"
-        last_end = 0
 
         for m in re.finditer(block_pattern, text, re.DOTALL):
             lang = m.group(1)
@@ -77,7 +91,6 @@ class Agent:
             if path:
                 content = self._strip_leading_path_comment(body, path)
                 files[path] = content.rstrip()
-            last_end = m.end()
 
         return files
 

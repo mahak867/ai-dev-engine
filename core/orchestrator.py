@@ -11,10 +11,11 @@ from core.ai.provider import LLMProvider
 from core.agents.base import (
     PlannerAgent, ArchitectAgent, CoderAgent,
     ReviewerAgent, DebuggerAgent, SelfHealerAgent, DocWriterAgent,
-    AgentResult,
 )
 from core.memory.store import MemoryStore, ProjectMemory
 from core.security import UnsafePathError, safe_join, write_files_contained
+from core import telemetry
+from core.execution.sandbox import DockerSandbox, sandbox_enabled
 
 log = logging.getLogger("apex.orchestrator")
 
@@ -35,6 +36,8 @@ class Orchestrator:
         self.on_dialogue = on_dialogue  # callback(from_agent, to_agent, msg_type, content)
         self.memory     = memory_store if memory_store is not None else MemoryStore()
         self.dialogue_log: list[dict] = []
+        self.last_usage: telemetry.UsageTracker | None = None
+        self.last_sandbox: dict | None = None
 
         llm = LLMProvider(model)
         self.planner   = PlannerAgent(llm)
@@ -68,6 +71,13 @@ class Orchestrator:
         output_dir: str = ".",
         skip_review: bool = False,
     ) -> str:
+        """Run the 9-agent pipeline. Per-agent usage ends up in ``self.last_usage``."""
+        tracker = telemetry.current_tracker() or telemetry.UsageTracker()
+        self.last_usage = tracker
+        with telemetry.track(tracker):
+            return self._generate_fullstack(name, request, output_dir, skip_review)
+
+    def _generate_fullstack(self, name, request, output_dir, skip_review) -> str:
         mem = ProjectMemory(name=name, request=request)
         # `name` becomes a directory under output_dir — it must be one safe component.
         out = safe_join(output_dir, name)
@@ -116,8 +126,9 @@ class Orchestrator:
                 except Exception as e:
                     arch_err[0] = str(e)
 
-            t_plan = threading.Thread(target=_run_planner,   daemon=True)
-            t_arch = threading.Thread(target=_run_architect, daemon=True)
+            # copy the caller's context so per-agent usage tracking follows the threads
+            t_plan = threading.Thread(target=telemetry.in_context(_run_planner),   daemon=True)
+            t_arch = threading.Thread(target=telemetry.in_context(_run_architect), daemon=True)
             t_plan.start(); t_arch.start()
             t_plan.join();  t_arch.join()
 
@@ -360,6 +371,11 @@ class Orchestrator:
                     f"Syntax validation: {passed}/{total} passed. "
                     f"Issues: {failed[:3]}")
 
+        # 5d. Executor — run it for real in the Docker sandbox, heal on failure
+        self.last_sandbox = None
+        if not self.dry_run and sandbox_enabled():
+            all_files = self._sandbox_loop(all_files)
+
         # 6. Documentation
         self._emit("DocWriter", "running", "Writing documentation...")
         if not self.dry_run:
@@ -376,7 +392,6 @@ class Orchestrator:
         mem.file_count = len(all_files)
 
         # Extract tech stack from plan for future memory context
-        import re as _re
         try:
             import json as _json
             plan_data = _json.loads(ctx.get("plan", "{}"))
@@ -391,6 +406,11 @@ class Orchestrator:
             for issue in review_result.critical[:3]:
                 mem.add_lesson(f"Watch for: {issue[:80]}")
 
+        if telemetry.current_tracker():
+            u = telemetry.current_tracker().summary()
+            mem.usage = {k: u[k] for k in ("calls", "total_tokens", "cost_usd", "llm_seconds", "wall_seconds")}
+        if self.last_sandbox:
+            mem.sandbox = {k: self.last_sandbox[k] for k in ("attempts", "passed", "first_attempt_passed")}
         rejected = self._write_files(out, all_files)
         if rejected:
             self._emit("System", "error",
@@ -399,20 +419,69 @@ class Orchestrator:
         self.memory.save(mem)
 
         final_score = review_result.score if review_result else 100
-        self._emit("System", "complete", f"Project ready at {out}")
+        usage = telemetry.current_tracker().summary() if telemetry.current_tracker() else {}
+        self._emit("System", "complete", f"Project ready: {out.name}/")
         self._emit("System", "done",
             f"complete — {len(all_files)} files generated",
-            {"quality_score": final_score, "files": len(all_files)})
+            {"quality_score": final_score, "files": len(all_files), "usage": usage,
+             "sandbox": self.last_sandbox})
         return str(out)
+
+    # ── Executor: sandboxed run + heal loop ────────────────────────────────────
+    def _sandbox_loop(self, all_files: dict[str, str]) -> dict[str, str]:
+        """
+        Run the generated Python project in the Docker sandbox (deps → compile →
+        import → pytest). On failure hand the real error output to SelfHealer and
+        retry, up to APEX_SANDBOX_HEAL_ROUNDS (default 2) times.
+        """
+        sbx = DockerSandbox()
+        rounds = max(0, int(os.environ.get("APEX_SANDBOX_HEAL_ROUNDS", "2")))
+        history = []
+        for attempt in range(rounds + 1):
+            self._emit("Executor", "running",
+                       f"Sandbox run {attempt + 1}: install → compile → import → tests (network off)")
+            with telemetry.stage("Executor"):
+                rep = sbx.smoke_test(None, files=all_files)
+            history.append(rep.to_dict())
+            if not rep.ran:
+                self._emit("Executor", "done", f"Sandbox skipped: {rep.reason}")
+                break
+            summary = (f"deps={'ok' if rep.deps_ok else 'FAIL'} compile={'ok' if rep.compile_ok else 'FAIL'} "
+                       f"import={'ok' if rep.import_ok else ('FAIL' if rep.import_ok is False else 'n/a')} "
+                       f"tests={rep.tests_passed}/{rep.tests_found}")
+            if rep.ok:
+                self._emit("Executor", "done", f"✓ Sandbox passed: {summary}")
+                self._dialogue("Executor", "DocWriter", "validation",
+                               f"Sandbox run passed on attempt {attempt + 1}: {summary}")
+                break
+            self._emit("Executor", "error", f"Sandbox failed: {summary}")
+            if attempt == rounds:
+                break
+            self._dialogue("Executor", "SelfHealer", "feedback",
+                           f"Sandbox run failed ({summary}). Real output: {rep.failure_log(300)}")
+            self._emit("SelfHealer", "running", "Fixing sandbox failures from real error output...")
+            heal = self.healer.heal(all_files, "The project failed when run in a sandbox:\n" + rep.failure_log())
+            if not heal.files:
+                self._emit("SelfHealer", "done", "No patch produced")
+                break
+            all_files = {**all_files, **heal.files}
+            self._emit("SelfHealer", "done", f"Patched {len(heal.files)} files — re-running sandbox")
+        self.last_sandbox = {
+            "attempts": len(history),
+            "passed": bool(history) and history[-1].get("ok", False),
+            "first_attempt_passed": bool(history) and history[0].get("ok", False),
+            "final": history[-1] if history else None,
+        }
+        return all_files
 
     # ── Stream generation ──────────────────────────────────────────────────────
     def generate_stream(self, name: str, request: str) -> Iterator[str]:
         ctx = {"name": name, "request": request}
-        yield f"[Planner] Analyzing...\n"
+        yield "[Planner] Analyzing...\n"
         if not self.dry_run:
             plan_result = self.planner.run(ctx)
             ctx["plan"] = plan_result.output
-        yield f"[Planner] Done. Starting code generation...\n\n"
+        yield "[Planner] Done. Starting code generation...\n\n"
         yield from self.coder.stream(ctx)
 
     # ── Edit existing project ──────────────────────────────────────────────────
