@@ -6,27 +6,77 @@ on:
   pull_request:
     branches: ["**"]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
 
       - name: Install dev dependencies
         run: pip install -r requirements-dev.txt
 
-      - name: Run tests
-        run: python -m pytest tests/ -v --tb=short
+      - name: Run tests (hermetic HOME, no provider keys)
+        env:
+          HOME: ${{ runner.temp }}/home
+          APEX_MEMORY_DIR: ${{ runner.temp }}/apex-memory
+        run: |
+          mkdir -p "$HOME"
+          # pytest exits non-zero (5) when zero tests are collected.
+          python -m pytest tests/ -v --tb=short
+          test ! -d "$GITHUB_WORKSPACE/.apex"
+
+  package:
+    name: Build + install wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build sdist and wheel
+        run: |
+          pip install build
+          python -m build
+          ls -l dist
+      - name: Inspect wheel contents
+        run: |
+          python - <<'EOF'
+          import zipfile, glob, sys
+          names = zipfile.ZipFile(glob.glob("dist/*.whl")[0]).namelist()
+          need = ["cli.py", "server.py", "mcp_server.py", "core/security.py", "core/orchestrator.py"]
+          missing = [n for n in need if n not in names]
+          print("missing:", missing); sys.exit(1 if missing else 0)
+          EOF
+      - name: Clean-venv install + CLI smoke test
+        run: |
+          python -m venv /tmp/v
+          /tmp/v/bin/pip install dist/*.whl
+          cd /tmp
+          /tmp/v/bin/apex --help
+          HOME=/tmp/h APEX_MEMORY_DIR=/tmp/h/mem /tmp/v/bin/apex generate "smoke test" --name smoke --output /tmp/out --dry-run
+          test -f /tmp/out/smoke/README.md

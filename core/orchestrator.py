@@ -14,6 +14,7 @@ from core.agents.base import (
     AgentResult,
 )
 from core.memory.store import MemoryStore, ProjectMemory
+from core.security import UnsafePathError, safe_join, write_files_contained
 
 log = logging.getLogger("apex.orchestrator")
 
@@ -27,11 +28,12 @@ class Orchestrator:
         dry_run: bool = False,
         on_event: Callable[[str, str, str], None] | None = None,
         on_dialogue: Callable[[str, str, str, str], None] | None = None,
+        memory_store: MemoryStore | None = None,
     ):
         self.dry_run    = dry_run
         self.on_event   = on_event or (lambda agent, status, msg: print(f"[{agent}] {status}: {msg}"))
         self.on_dialogue = on_dialogue  # callback(from_agent, to_agent, msg_type, content)
-        self.memory     = MemoryStore()
+        self.memory     = memory_store if memory_store is not None else MemoryStore()
         self.dialogue_log: list[dict] = []
 
         llm = LLMProvider(model)
@@ -67,7 +69,10 @@ class Orchestrator:
         skip_review: bool = False,
     ) -> str:
         mem = ProjectMemory(name=name, request=request)
-        out = Path(output_dir) / name
+        # `name` becomes a directory under output_dir — it must be one safe component.
+        out = safe_join(output_dir, name)
+        if out.parent != Path(output_dir).resolve():
+            raise UnsafePathError(f"project name must be a single path component: {name!r}")
         ctx = {"name": name, "request": request}
         self.dialogue_log = []  # reset per run
 
@@ -140,11 +145,12 @@ class Orchestrator:
             else:
                 self._emit("Architect", "done", f"Arch error: {arch_err[0]}")
 
-            self._dialogue("Planner", "Coder", "sync",
-                f"Parallel phase complete. Both Planner and Architect finished. "
-                f"Planner took {plan_result.duration:.1f}s, Architect took {arch_result.duration:.1f}s. "
-                f"Combined time saved vs sequential: ~{min(plan_result.duration, arch_result.duration):.0f}s. "
-                f"Handing combined context to Coder.")
+            if plan_result and arch_result:
+                self._dialogue("Planner", "Coder", "sync",
+                    f"Parallel phase complete. Both Planner and Architect finished. "
+                    f"Planner took {plan_result.duration:.1f}s, Architect took {arch_result.duration:.1f}s. "
+                    f"Combined time saved vs sequential: ~{min(plan_result.duration, arch_result.duration):.0f}s. "
+                    f"Handing combined context to Coder.")
         else:
             ctx["plan"] = '{"tech_stack": {"frontend": "Next.js", "backend": "FastAPI"}}'
             self._emit("Planner",   "done", "[dry-run]")
@@ -385,7 +391,11 @@ class Orchestrator:
             for issue in review_result.critical[:3]:
                 mem.add_lesson(f"Watch for: {issue[:80]}")
 
-        self._write_files(out, all_files)
+        rejected = self._write_files(out, all_files)
+        if rejected:
+            self._emit("System", "error",
+                f"Refused {len(rejected)} unsafe file path(s) from model output: {rejected[:3]}")
+            mem.add_lesson(f"Model proposed {len(rejected)} path(s) outside the project; they were dropped")
         self.memory.save(mem)
 
         final_score = review_result.score if review_result else 100
@@ -415,12 +425,9 @@ class Orchestrator:
         }
         self._emit("Coder", "running", f"Applying: {instruction}")
         result = self.coder.run({**ctx, "name": path.name, "plan": ""})
-        changed = []
-        for fpath, content in result.files.items():
-            full = path / fpath
-            full.parent.mkdir(parents=True, exist_ok=True)
-            full.write_text(content, encoding="utf-8")
-            changed.append(fpath)
+        changed, rejected = write_files_contained(path, result.files, log)
+        if rejected:
+            self._emit("Coder", "error", f"Refused {len(rejected)} unsafe path(s): {rejected[:3]}")
         self._emit("Coder", "done", f"Modified {len(changed)} files")
         return changed
 
@@ -432,8 +439,17 @@ class Orchestrator:
         self._emit("Debugger", "running", f"Analyzing error in {file_path}")
         result = self.debugger.run(ctx)
         if result.files:
-            for fpath, content in result.files.items():
-                Path(fpath).write_text(content, encoding="utf-8")
+            # Only patch the file being debugged. The model's chosen paths are
+            # untrusted and used to be written relative to the current directory.
+            target = path.resolve()
+            match = [c for f, c in result.files.items() if Path(f).name == target.name]
+            if len(result.files) == 1 and not match:
+                match = list(result.files.values())
+            if match and target.is_file():
+                write_files_contained(target.parent, {target.name: match[0]}, log)
+            ignored = len(result.files) - (1 if match else 0)
+            if ignored:
+                self._emit("Debugger", "error", f"Ignored {ignored} patch(es) for other files")
         self._emit("Debugger", "done", "Fix applied")
         return result.output
 
@@ -446,17 +462,18 @@ class Orchestrator:
             except TypeError:
                 self.on_event(agent, status, msg)
 
-    def _write_files(self, base: Path, files: dict[str, str]):
+    def _write_files(self, base: Path, files: dict[str, str]) -> list[str]:
+        """Write model-generated files under ``base``; returns rejected paths."""
         base.mkdir(parents=True, exist_ok=True)
-        for rel_path, content in files.items():
-            full = base / rel_path
-            full.parent.mkdir(parents=True, exist_ok=True)
-            full.write_text(content, encoding="utf-8")
+        _, rejected = write_files_contained(base, files, log)
+        return rejected
 
     def _read_project(self, base: Path) -> dict[str, str]:
         files = {}
         skip = {".git", "node_modules", "__pycache__", ".next", "dist", "build"}
         for p in base.rglob("*"):
+            if p.is_symlink():
+                continue  # don't follow links out of the project into the prompt
             if p.is_file() and not any(s in p.parts for s in skip):
                 try:
                     files[str(p.relative_to(base))] = p.read_text(encoding="utf-8")

@@ -1,6 +1,8 @@
 # core/ai/deployer.py
-import os, subprocess
+import os, re, subprocess
 from pathlib import Path
+
+from core.security import minimal_env, require_approval, run_argv
 
 def create_procfile(project_path):
     backend = Path(project_path) / "backend"
@@ -11,10 +13,12 @@ def create_procfile(project_path):
 
 def deploy_to_render(project_path):
     path = Path(project_path)
-    name = path.name.replace("-","_")
+    # Project names end up inside YAML; keep them to a safe charset.
+    safe = re.sub(r"[^A-Za-z0-9_-]", "-", path.name)[:50] or "app"
+    name = safe.replace("-", "_")
     yaml = f"""services:
   - type: web
-    name: {path.name}-backend
+    name: {safe}-backend
     env: python
     buildCommand: pip install -r backend/requirements.txt
     startCommand: cd backend && gunicorn app:app --workers 2 --bind 0.0.0.0:$PORT
@@ -23,10 +27,10 @@ def deploy_to_render(project_path):
         generateValue: true
       - key: DATABASE_URL
         fromDatabase:
-          name: {path.name}-db
+          name: {safe}-db
           property: connectionString
 databases:
-  - name: {path.name}-db
+  - name: {safe}-db
     databaseName: {name}
 """
     (path / "render.yaml").write_text(yaml)
@@ -51,15 +55,25 @@ jobs:
       - run: cd backend && pip install -r requirements.txt && python -c "from app import create_app; create_app(); print('OK')"
 """)
 
-def deploy_to_railway(project_path):
-    result = subprocess.run(["railway","--version"], capture_output=True)
-    if result.returncode != 0:
+def deploy_to_railway(project_path, *, approved: bool | None = None):
+    """
+    Publish ``<project>/backend`` with the Railway CLI.
+
+    This uploads code and can incur charges, so it requires explicit approval
+    (approved=True or APEX_ALLOW_EXECUTION=1). Only Railway's own token is
+    passed through to the CLI; provider API keys are not.
+    """
+    require_approval("deploy_to_railway", approved)
+    backend = Path(project_path).resolve() / "backend"
+    if not backend.is_dir():
+        return {"success": False, "error": f"No backend directory at {backend}"}
+    env = minimal_env(passthrough=("RAILWAY_TOKEN", "RAILWAY_API_TOKEN"))
+    ver = run_argv(["railway", "--version"], backend, timeout=30, env=env)
+    if ver.returncode != 0:
         return {"success": False, "error": "Railway CLI not installed", "install": "npm install -g @railway/cli"}
-    try:
-        r = subprocess.run(["railway","up"], cwd=str(Path(project_path)/"backend"), capture_output=True, text=True)
-        return {"success": r.returncode==0, "output": r.stdout, "error": r.stderr}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+    r = run_argv(["railway", "up"], backend, timeout=900, env=env)
+    return {"success": r.returncode == 0, "output": r.stdout, "error": r.error}
+
 
 def print_deploy_guide(project_path, name):
     print(f"""

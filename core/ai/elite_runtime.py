@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+import sys
 from pathlib import Path
 from typing import Dict, List
 
@@ -67,8 +68,8 @@ class EliteRuntime:
         syntax_msg = "No python files found"
         py_files = list(self.project_path.rglob("*.py"))
         if py_files:
-            compile_cmd = ["py", "-m", "py_compile"] + [str(p) for p in py_files[:60]]
-            result = self.tools.call("bash", command=" ".join(compile_cmd), cwd=".")
+            compile_cmd = [sys.executable, "-m", "py_compile"] + [str(p) for p in py_files[:60]]
+            result = self.tools.call("bash", command=compile_cmd, cwd=".")
             syntax_ok = "Traceback" not in result and "SyntaxError" not in result and "Error" not in result
             syntax_msg = "syntax ok" if syntax_ok else result[:280]
         return {"doctor": doctor, "syntax_ok": syntax_ok, "syntax_message": syntax_msg}
