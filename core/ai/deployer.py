@@ -1,5 +1,5 @@
 # core/ai/deployer.py
-import os, re, subprocess
+import re
 from pathlib import Path
 
 from core.security import minimal_env, require_approval, run_argv

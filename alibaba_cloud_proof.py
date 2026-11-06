@@ -17,7 +17,7 @@ makes authenticated requests to Alibaba Cloud infrastructure.
 VERIFICATION:
 Run this file to confirm live connection to Alibaba Cloud.
 """
-import os, requests, json
+import os, requests
 from dotenv import load_dotenv
 load_dotenv()
 

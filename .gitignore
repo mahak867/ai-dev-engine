@@ -15,3 +15,9 @@ runs/
 qwen-test*/
 test-run*/
 benchmark_runs/
+
+eval/results/
+.apex-deps/
+dist/
+build/
+*.egg-info/

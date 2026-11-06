@@ -13,7 +13,7 @@ from __future__ import annotations
 from dotenv import load_dotenv
 load_dotenv()
 
-import argparse, json, time, os, sys, logging
+import argparse, json, time, os, logging
 from pathlib import Path
 from datetime import datetime
 
@@ -31,7 +31,7 @@ def bold(t):   return _c("1",        t)
 BANNER = f"""
 {amber("╔══════════════════════════════════════════════════════════╗")}
 {amber("║")}  {bold("AGENT SOCIETY BENCHMARK")}  v1.0                           {amber("║")}
-{amber("║")}  {teal("Single Agent  vs  7-Agent Society (Qwen Cloud)")}          {amber("║")}
+{amber("║")}  {teal("Single Agent  vs  9-Agent Society           ")}          {amber("║")}
 {amber("╚══════════════════════════════════════════════════════════╝")}
 """
 
@@ -186,12 +186,10 @@ def run_single_agent(task: str, output_dir: str) -> dict:
     log_event(f"done — {len(files)} files in {elapsed:.1f}s")
 
     # save output
+    from core.security import write_files_contained
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
-    for fname, content in files.items():
-        fpath = out / fname
-        fpath.parent.mkdir(parents=True, exist_ok=True)
-        fpath.write_text(content, encoding="utf-8")
+    write_files_contained(out, files)  # model-chosen paths are untrusted
 
     quality = score_output(files, task)
 
@@ -206,7 +204,7 @@ def run_single_agent(task: str, output_dir: str) -> dict:
 
 # ── multi-agent society runner ─────────────────────────────────────────────────
 def run_agent_society(task: str, output_dir: str) -> dict:
-    """Run the full 7-agent society pipeline."""
+    """Run the full 9-agent society pipeline."""
     from core.orchestrator import Orchestrator
 
     print(f"\n  {teal('[ AGENT SOCIETY ]')} starting...")

@@ -1,0 +1,17 @@
+.git
+.github
+**/__pycache__
+*.pyc
+.env
+.env.*
+!.env.example
+runs/
+eval/results/
+benchmark_runs/
+tests/
+deploy/
+scripts/
+*.png
+dist/
+build/
+*.egg-info
