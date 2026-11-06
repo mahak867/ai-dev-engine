@@ -1,51 +1,34 @@
-import os
+"""Contained writer for generated project files (see core.security.safe_join)."""
+from __future__ import annotations
+
+from core.security import UnsafePathError, safe_join, safe_write_text
 
 
 class FileEngine:
-    def write_files(self, project_path: str, files: list):
-        base_path = os.path.abspath(project_path)
+    def write_files(self, project_path: str, files: list, *, overwrite: bool = True) -> list[str]:
+        """
+        Write ``[{"path": ..., "content": ...}, ...]`` under ``project_path``.
 
+        Every path is validated before anything is written, so one bad entry
+        aborts the batch without leaving a half-written project.
+        """
+        planned = []
         for file in files:
             relative_path = file.get("path")
-            content = file.get("content", "")
-
             if not relative_path:
                 raise ValueError("File entry missing 'path'.")
+            safe_join(project_path, relative_path)  # raises UnsafePathError
+            planned.append((relative_path, file.get("content", "")))
 
-            # ---- Sanitize Path ----
-            safe_path = self._sanitize_path(base_path, relative_path)
-
-            # ---- Ensure Directory Exists ----
-            os.makedirs(os.path.dirname(safe_path), exist_ok=True)
-
-            # ---- Write File ----
-            with open(safe_path, "w", encoding="utf-8") as f:
-                f.write(content)
+        written = []
+        for rel, content in planned:
+            safe_write_text(project_path, rel, content, overwrite=overwrite)
+            written.append(rel)
+        return written
 
     def _sanitize_path(self, base_path: str, relative_path: str) -> str:
-        """
-        Ensures the file path:
-        - Is not absolute
-        - Does not escape project directory
-        - Is safely normalized
-        """
+        """Backward-compatible wrapper; prefer core.security.safe_join."""
+        return str(safe_join(base_path, relative_path))
 
-        # Remove leading slashes/backslashes
-        relative_path = relative_path.lstrip("/\\").strip()
 
-        # Block obvious traversal attempts
-        if ".." in relative_path:
-            raise ValueError("Invalid file path detected (directory traversal).")
-
-        # Build normalized absolute path
-        full_path = os.path.abspath(
-            os.path.normpath(
-                os.path.join(base_path, relative_path)
-            )
-        )
-
-        # Final safety check: must remain inside project directory
-        if not full_path.startswith(base_path):
-            raise ValueError("Invalid file path detected (directory traversal).")
-
-        return full_path
+__all__ = ["FileEngine", "UnsafePathError"]

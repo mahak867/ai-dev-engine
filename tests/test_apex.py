@@ -6,6 +6,13 @@ import pytest, json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 
+def _orch(tmp_path, **kw):
+    """Orchestrator with an injected temp MemoryStore (never touches ~/.apex)."""
+    from core.orchestrator import Orchestrator
+    from core.memory.store import MemoryStore
+    return Orchestrator(dry_run=True, memory_store=MemoryStore(str(tmp_path / "mem")), **kw)
+
+
 # ── Provider ───────────────────────────────────────────────────────────────────
 class TestProvider:
     def test_model_catalogue_has_free_models(self):
@@ -192,39 +199,32 @@ class TestMemory:
 # ── Orchestrator ────────────────────────────────────────────────────────────────
 class TestOrchestrator:
     def test_dry_run_emits_planner_event(self, tmp_path):
-        from core.orchestrator import Orchestrator
         events = []
-        orch = Orchestrator(dry_run=True, on_event=lambda a, s, m: events.append(a))
+        orch = _orch(tmp_path, on_event=lambda a, s, m: events.append(a))
         orch.generate_fullstack("testapp", "a todo app", str(tmp_path))
         assert "Planner" in events
 
     def test_dry_run_emits_coder_event(self, tmp_path):
-        from core.orchestrator import Orchestrator
         events = []
-        orch = Orchestrator(dry_run=True, on_event=lambda a, s, m: events.append(a))
+        orch = _orch(tmp_path, on_event=lambda a, s, m: events.append(a))
         orch.generate_fullstack("testapp", "a todo app", str(tmp_path))
         assert "Coder" in events
 
     def test_dry_run_creates_output_dir(self, tmp_path):
-        from core.orchestrator import Orchestrator
         import os
-        orch = Orchestrator(dry_run=True)
+        orch = _orch(tmp_path)
         path = orch.generate_fullstack("myapp", "simple app", str(tmp_path))
         assert os.path.exists(path)
 
     def test_dry_run_returns_string_path(self, tmp_path):
-        from core.orchestrator import Orchestrator
-        orch = Orchestrator(dry_run=True)
+        orch = _orch(tmp_path)
         result = orch.generate_fullstack("app", "test", str(tmp_path))
         assert isinstance(result, str)
 
     def test_dry_run_saves_to_memory(self, tmp_path):
-        from core.orchestrator import Orchestrator
-        from core.memory.store import MemoryStore
-        orch = Orchestrator(dry_run=True)
+        orch = _orch(tmp_path)
         orch.generate_fullstack("memtest", "a test app", str(tmp_path))
-        store = MemoryStore()
-        projects = store.list_projects()
+        projects = orch.memory.list_projects()
         assert any(p["name"] == "memtest" for p in projects)
 
 
@@ -232,33 +232,33 @@ class TestOrchestrator:
 class TestExecutor:
     def test_echo_command_passes(self, tmp_path):
         from core.execution.runner import Executor
-        r = Executor(str(tmp_path)).run("echo hello")
+        r = Executor(str(tmp_path), allow_execution=True).run([sys.executable, "-c", "print('hello')"])
         assert r.ok
         assert "hello" in r.stdout
 
     def test_failing_command(self, tmp_path):
         from core.execution.runner import Executor
-        r = Executor(str(tmp_path)).run("exit 1")
+        r = Executor(str(tmp_path), allow_execution=True).run([sys.executable, "-c", "import sys; sys.exit(1)"])
         assert not r.ok
 
     def test_run_python_file(self, tmp_path):
         from core.execution.runner import Executor
         (tmp_path / "hello.py").write_text('print("apex v3")')
-        r = Executor(str(tmp_path)).run_file("hello.py")
+        r = Executor(str(tmp_path), allow_execution=True).run_file("hello.py")
         assert r.ok
         assert "apex v3" in r.stdout
 
     def test_no_deps_file(self, tmp_path):
         from core.execution.runner import Executor
-        r = Executor(str(tmp_path)).install_deps()
+        r = Executor(str(tmp_path), allow_execution=True).install_deps()
         assert "No deps" in r.stdout
 
     def test_exec_result_ok_property(self, tmp_path):
         from core.execution.runner import Executor
-        r = Executor(str(tmp_path)).run("echo ok")
+        r = Executor(str(tmp_path), allow_execution=True).run([sys.executable, "-c", "print('ok')"])
         assert r.ok is True
 
     def test_exec_result_duration(self, tmp_path):
         from core.execution.runner import Executor
-        r = Executor(str(tmp_path)).run("echo hi")
+        r = Executor(str(tmp_path), allow_execution=True).run([sys.executable, "-c", "print('hi')"])
         assert r.duration >= 0

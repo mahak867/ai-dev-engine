@@ -214,6 +214,25 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 </div><!-- .shell -->
 
 <script>
+// ── security helpers ───────────────────────────────────────────────────────────
+// Anything from the server (task text, model output, lessons) is untrusted and
+// must be escaped before it goes into innerHTML — model output is an XSS vector.
+function esc(v){return String(v==null?'':v).replace(/[&<>"'`]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;'}[c]))}
+function cls(v){return String(v==null?'':v).replace(/[^A-Za-z0-9_-]/g,'')}
+// Optional API token (needed when the server sets APEX_API_TOKEN). Pass it once
+// as /#token=... ; it is kept in sessionStorage and stripped from the URL bar.
+const APEX_TOKEN=(()=>{try{
+  const m=location.hash.match(/token=([^&]+)/);
+  if(m){sessionStorage.setItem('apexToken',decodeURIComponent(m[1]));history.replaceState(null,'',location.pathname+location.search)}
+  return sessionStorage.getItem('apexToken')||'';
+}catch(e){return ''}})();
+function apiFetch(url,opts={}){
+  const h=Object.assign({},opts.headers||{});
+  if(APEX_TOKEN) h['Authorization']='Bearer '+APEX_TOKEN;
+  return fetch(url,Object.assign({},opts,{headers:h}));
+}
+function tokenQS(){return APEX_TOKEN?('?token='+encodeURIComponent(APEX_TOKEN)):''}
+
 // ── SVG namespace ──────────────────────────────────────────────────────────────
 const NS = 'http://www.w3.org/2000/svg';
 function s(tag){return document.createElementNS(NS,tag)}
@@ -585,9 +604,8 @@ svg.addEventListener('wheel',e=>{
 let ws=null, wsRetry=null;
 function connectWS(){
   const wsProto=window.location.protocol==='https:'?'wss:':'ws:';
-  const wsHost=window.location.hostname||'127.0.0.1';
-  const wsPort=window.location.port||'8000';
-  ws=new WebSocket(wsProto+'//'+wsHost+':'+wsPort+'/ws');
+  const wsHostPort=window.location.host||'127.0.0.1:8000';
+  ws=new WebSocket(wsProto+'//'+wsHostPort+'/ws'+tokenQS());
   ws.onopen=()=>{
     document.getElementById('wsd').className='ws-dot on';
     document.getElementById('wst').textContent='connected';
@@ -658,7 +676,7 @@ function handleMsg(m){
       if(currentSessionId){
         const dlBtn=document.getElementById('dlBtn');
         dlBtn.style.display='inline-flex';
-        dlBtn.onclick=()=>window.open(`/api/sessions/${currentSessionId}/download`,'_blank');
+        dlBtn.onclick=()=>window.open(`/api/sessions/${encodeURIComponent(currentSessionId)}/download`+tokenQS(),'_blank');
       }
     }
 
@@ -678,10 +696,10 @@ function addDialogue(d){
   document.getElementById('dynT').textContent='AGENT DIALOGUE';
   const rows = dialogueEntries.slice(-12).map(e=>{
     const cls = e.type==='request'?'sc-bad':e.type==='patch'?'sc-good':'';
-    const arrow = `${e.from} → ${e.to}`;
+    const arrow = `${esc(e.from)} → ${esc(e.to)}`;
     return `<div class="dlg-row ${cls}">
-      <div class="dlg-meta"><span class="dlg-arrow">${arrow}</span><span class="dlg-type">${e.type}</span></div>
-      <div class="dlg-content">${(e.content||'').slice(0,180)}</div>
+      <div class="dlg-meta"><span class="dlg-arrow">${arrow}</span><span class="dlg-type">${esc(e.type)}</span></div>
+      <div class="dlg-content">${esc((e.content||'').slice(0,180))}</div>
     </div>`;
   }).join('');
   document.getElementById('dynB').innerHTML = `<div class="dlg-feed">${rows}</div>`;
@@ -715,10 +733,10 @@ function addLog(agent,status,msg,elapsed){
   if(logs.length===0) p.innerHTML='';
   const ts=elapsed!=null?elapsed:(t0?((Date.now()-t0)/1000).toFixed(1):'0.0');
   logs.push({agent,status,msg,ts});
-  const ac=`a${agent}`;
+  const ac=`a${cls(agent)}`;
   const sc={'done':'cdone','running':'crun','error':'cerr'}[status]||'';
   const d=document.createElement('div');d.className='lr';
-  d.innerHTML=`<span class="lts">${ts}s</span><span class="lag ${ac}">${(agent||'SYS').slice(0,8).toUpperCase()}</span><span class="lmsg ${sc}">${msg}</span>`;
+  d.innerHTML=`<span class="lts">${ts}s</span><span class="lag ${ac}">${esc((agent||'SYS').slice(0,8).toUpperCase())}</span><span class="lmsg ${sc}">${esc(msg)}</span>`;
   p.appendChild(d);p.scrollTop=p.scrollHeight;
   document.getElementById('lc').textContent=`${logs.length} events`;
 }
@@ -826,16 +844,16 @@ function showBench(d){
     <div id="cumulativeStats" style="margin-top:8px;color:var(--dim);font-size:9px">loading cumulative stats...</div>`;
   document.getElementById('dynB').innerHTML=baseHTML;
   // fetch live cumulative impact stats
-  fetch('/api/society/stats').then(r=>r.json()).then(stats=>{
+  apiFetch('/api/society/stats').then(r=>r.json()).then(stats=>{
     const soc=stats.society||{}, imp=stats.improvement||{};
     document.getElementById('cumulativeStats').innerHTML=`
       <div style="color:var(--sub);letter-spacing:1px;margin-bottom:4px">CUMULATIVE IMPACT — ALL RUNS</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
-        <div class="sc sc-good"><div class="sc-t">${soc.total_runs||0}</div><div class="sc-d">Runs</div></div>
-        <div class="sc sc-good"><div class="sc-t">${soc.total_files_generated||0}</div><div class="sc-d">Files</div></div>
-        <div class="sc sc-good"><div class="sc-t">${soc.avg_quality_score||0}/100</div><div class="sc-d">Avg Quality</div></div>
+        <div class="sc sc-good"><div class="sc-t">${esc(soc.total_runs||0)}</div><div class="sc-d">Runs</div></div>
+        <div class="sc sc-good"><div class="sc-t">${esc(soc.total_files_generated||0)}</div><div class="sc-d">Files</div></div>
+        <div class="sc sc-good"><div class="sc-t">${esc(soc.avg_quality_score||0)}/100</div><div class="sc-d">Avg Quality</div></div>
       </div>
-      <div style="color:var(--green);font-size:8px;margin-top:4px">✓ ${imp.cve_reduction||'0 CVEs shipped across all runs'}</div>`;
+      <div style="color:var(--dim);font-size:8px;margin-top:4px">${esc(imp.note||'')}</div>`;
   }).catch(()=>{
     document.getElementById('cumulativeStats').innerHTML='';
   });
@@ -843,22 +861,22 @@ function showBench(d){
 
 function showMemory(){
   document.getElementById('dynT').textContent='MEMORY & LEARNING';
-  fetch('/api/memory/stats').then(r=>r.json()).then(d=>{
+  apiFetch('/api/memory/stats').then(r=>r.json()).then(d=>{
     const projects = d.projects||[];
     const stats = d.stats||{};
     const rows = projects.slice(0,8).map(p=>`
       <div class="sc sc-good" style="margin-bottom:6px">
-        <div class="sc-t">${p.name} <span style="color:var(--dim);font-size:8px">${new Date(p.created*1000).toLocaleDateString()}</span></div>
-        <div class="sc-d">${p.request}</div>
-        ${p.quality_score?`<div class="sc-d" style="color:var(--green)">Quality: ${p.quality_score}/100 · ${p.file_count} files</div>`:''}
-        ${p.lessons_learned&&p.lessons_learned.length?`<div class="sc-d" style="color:#ffcc44;font-size:8px">💡 ${p.lessons_learned[0]}</div>`:''}
+        <div class="sc-t">${esc(p.name)} <span style="color:var(--dim);font-size:8px">${esc(new Date(p.created*1000).toLocaleDateString())}</span></div>
+        <div class="sc-d">${esc(p.request)}</div>
+        ${p.quality_score?`<div class="sc-d" style="color:var(--green)">Quality: ${esc(p.quality_score)}/100 · ${esc(p.file_count)} files</div>`:''}
+        ${p.lessons_learned&&p.lessons_learned.length?`<div class="sc-d" style="color:#ffcc44;font-size:8px">💡 ${esc(p.lessons_learned[0])}</div>`:''}
       </div>`).join('');
     document.getElementById('dynB').innerHTML=`
       <div style="padding:8px">
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
-          <div class="sc sc-good"><div class="sc-t">${stats.total_runs||0}</div><div class="sc-d">Total Runs</div></div>
-          <div class="sc sc-good"><div class="sc-t">${stats.avg_quality||0}/100</div><div class="sc-d">Avg Quality</div></div>
-          <div class="sc sc-good"><div class="sc-t">${stats.total_files||0}</div><div class="sc-d">Files Generated</div></div>
+          <div class="sc sc-good"><div class="sc-t">${esc(stats.total_runs||0)}</div><div class="sc-d">Total Runs</div></div>
+          <div class="sc sc-good"><div class="sc-t">${esc(stats.avg_quality||0)}/100</div><div class="sc-d">Avg Quality</div></div>
+          <div class="sc sc-good"><div class="sc-t">${esc(stats.total_files||0)}</div><div class="sc-d">Files Generated</div></div>
         </div>
         <div style="color:var(--sub);font-size:9px;margin-bottom:8px">PAST PROJECTS — agents learn from these</div>
         ${rows||'<div class="empty">No past runs yet. Run a task to start building memory.</div>'}
