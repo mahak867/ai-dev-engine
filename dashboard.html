@@ -239,6 +239,12 @@ function drawStatic(){
   poly(c,[iso(0,0,WH),iso(0,GH,WH),iso(-.35,GH,WH),iso(-.35,-.35,WH)],'#3a3c63');
   poly(c,[iso(GW,0,0),iso(GW,-.35,0),iso(GW,-.35,WH),iso(GW,0,WH)],'#1b1c30');
   poly(c,[iso(0,GH,0),iso(-.35,GH,0),iso(-.35,GH,WH),iso(0,GH,WH)],'#18192b');
+  // panel seams and trim
+  for(let x=1;x<GW;x+=2)poly(c,[iso(x,0,3),iso(x+.06,0,3),iso(x+.06,0,40),iso(x,0,40)],'#26274280');
+  for(let y=1;y<GH;y+=2)poly(c,[iso(0,y,3),iso(0,y+.06,3),iso(0,y+.06,40),iso(0,y,40)],'#1f203880');
+  wallY(c,0,GW,40,41.5,'#3a3c63');wallX(c,0,GH,40,41.5,'#33355a');
+  // neon sign frame on the left wall
+  wallX(c,9.3,17.2,34.5,39.5,'#16172a');
   // windows on the left wall
   for(const [a,b] of [[1,3.6],[4.4,7]]){wallX(c,a,b,14,36,'#4b4f7a');wallX(c,a+.2,b-.2,16,34,'#6fa3d8');wallX(c,a+.2,b-.2,16,22,'#8fbde6')}
   // posters, docs room
@@ -246,8 +252,10 @@ function drawStatic(){
   wallX(c,13,15.4,20,34,'#2a6f8a');wallX(c,13.3,15.1,22,26,'#9fe1cb');
   // whiteboard / kanban / quality frames
   wallY(c,1.4,7.2,12,35,'#9aa0c3');wallY(c,1.6,7,13,34,'#f3f4fa');
-  wallY(c,10,18,13,37,'#11121f');wallY(c,10.2,17.8,14,36,'#191b2e');
-  wallY(c,20.3,26.7,15,35,'#11121f');wallY(c,20.5,26.5,16,34,'#15232a');
+  wallY(c,9.9,18.1,12,38,'#0d0e1a');wallY(c,10.05,17.95,13,37,'#181a2d');
+  wallY(c,20.2,26.8,12,38,'#0d0e1a');wallY(c,20.35,26.65,13,37,'#132027');
+  poly(c,[iso(9.9,-.3,38),iso(18.1,-.3,38),iso(18.1,0,38),iso(9.9,0,38)],'#2b2e4c');
+  poly(c,[iso(20.2,-.3,38),iso(26.8,-.3,38),iso(26.8,0,38),iso(20.2,0,38)],'#2b2e4c');
   // clock
   wallY(c,8.2,8.9,29,36,'#e8e9f6');
 }
@@ -256,20 +264,26 @@ function drawWallLive(c,t){
   // sticky notes on the whiteboard
   const cols=['#fbbf24','#f9a8d4','#86efac','#93c5fd'];
   for(let i=0;i<Math.min(office.notes,14);i++){const col=i%7,row=(i/7)|0;
-    const x=1.9+col*.72,z=29-row*8;poly(c,[iso(x,0,z),iso(x+.5,0,z),iso(x+.5,0,z+5),iso(x,0,z+5)],cols[i%4])}
+    const x=1.9+col*.72,z=25-row*7;poly(c,[iso(x,0,z),iso(x+.5,0,z),iso(x+.5,0,z+5),iso(x,0,z+5)],cols[i%4])}
   // marker lines
   c.fillStyle='#8b7fe8';for(let i=0;i<3;i++){const p=iso(2+i*1.6,0,16);c.fillRect(p[0],p[1],4,1)}
-  // kanban: 5 columns PLAN BUILD REVIEW TEST SHIP
-  for(let k=0;k<5;k++){const x=10.5+k*1.48;
-    poly(c,[iso(x,0,15),iso(x+1.2,0,15),iso(x+1.2,0,35),iso(x,0,35)],'#22243c');
-    const done=k<office.stage, cur=k===office.stage&&office.running;
-    if(done||cur){const blink=cur&&((t*3)|0)%2;
-      poly(c,[iso(x+.15,0,27),iso(x+1.05,0,27),iso(x+1.05,0,32),iso(x+.15,0,32)],done?'#4ade80':(blink?'#fbbf24':'#a07a1c'))}
-    poly(c,[iso(x+.15,0,17),iso(x+1.05,0,17),iso(x+1.05,0,18.5),iso(x+.15,0,18.5)],'#3a3d58');
+  // pipeline board: 5 columns with a label band and a card per agent step
+  for(let k=0;k<5;k++){const x=KX(k),w=KW;
+    const done=k<office.stage,cur=k===office.stage&&office.running;
+    poly(c,[iso(x,0,14),iso(x+w,0,14),iso(x+w,0,31),iso(x,0,31)],cur?'#2a2a3f':'#1f2136');
+    poly(c,[iso(x,0,31.5),iso(x+w,0,31.5),iso(x+w,0,36),iso(x,0,36)],done?'#1f4a33':cur?'#5a4514':'#262842');
+    const n=Math.min(4,office.stageCount[k]||0);
+    for(let i=0;i<n;i++){const z=27-i*3.4;const last=i===n-1;
+      const col=done?'#4ade80':cur?(last&&((t*3)|0)%2?'#fde68a':'#fbbf24'):'#565a80';
+      poly(c,[iso(x+.14,0,z),iso(x+w-.14,0,z),iso(x+w-.14,0,z+2.5),iso(x+.14,0,z+2.5)],col);
+      px(c,iso(x+.3,0,z+1.5),'#1b1c2e');px(c,iso(x+.5,0,z+1.5),'#1b1c2e')}
+    if(cur)poly(c,[iso(x,0,14),iso(x+w,0,14),iso(x+w,0,14.8),iso(x,0,14.8)],'#fbbf24');
   }
-  // quality bar
+  // quality panel bar
   const q=office.quality;
-  if(q!=null){const w=5.6*q/100;poly(c,[iso(20.7,0,18),iso(20.7+w,0,18),iso(20.7+w,0,20),iso(20.7,0,20)],q>=85?'#4ade80':q>=70?'#fbbf24':'#f87171')}
+  poly(c,[iso(20.8,0,15),iso(26.2,0,15),iso(26.2,0,17),iso(20.8,0,17)],'#0b151a');
+  if(q!=null){const w=5.4*q/100;poly(c,[iso(20.8,0,15),iso(20.8+w,0,15),iso(20.8+w,0,17),iso(20.8,0,17)],q>=85?'#4ade80':q>=70?'#fbbf24':'#f87171')}
+  for(const m of [70,85]){px(c,iso(20.8+5.4*m/100,0,18),'#3d5a66')}
   // clock hands
   const d=new Date(),cx=8.55,cz=32.5;const hA=(d.getHours()%12+d.getMinutes()/60)/12*Math.PI*2,mA=d.getMinutes()/60*Math.PI*2;
   px(c,iso(cx+Math.sin(hA)*.12,0,cz+Math.cos(hA)*1.6),'#1d1e33');px(c,iso(cx+Math.sin(mA)*.25,0,cz+Math.cos(mA)*2.6),'#1d1e33');
@@ -371,7 +385,7 @@ function scheduleIdle(a,now){
 }
 
 // ── office state ──────────────────────────────────────────────────────────────
-const office={running:false,stage:0,notes:3,quality:null,events:0,files:0,tokens:null,sandbox:[],demo:false,session:null,lastFeed:[],confetti:[]};
+const office={stageCount:[0,0,0,0,0],running:false,stage:0,notes:3,quality:null,events:0,files:0,tokens:null,sandbox:[],demo:false,session:null,lastFeed:[],confetti:[]};
 const rack={mode:'idle',until:0};
 const STAGES=['plan','build','review','test','ship'];
 const STAGE_OF={Memory:0,Planner:0,Architect:0,Coder:1,Debugger:1,SelfHealer:1,Reviewer:2,Executor:3,DocWriter:4};
@@ -407,6 +421,11 @@ function drawChar(c,a,t){
   a.sx=fx;a.sy=fy;a.fy=Math.round(p[1]);
 }
 
+const KX=k=>10.25+k*1.54,KW=1.4;
+function wallText(text,w,z,size,color,wall,weight){const p=wall==='x'?iso(0,w,z):iso(w,0,z);
+  ctx.save();ctx.setTransform(1,wall==='x'?-.5:.5,0,1,p[0]*S,p[1]*S);
+  ctx.font=`${weight||600} ${size}px "Pixelify Sans", monospace`;ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillStyle=color;ctx.fillText(text,0,0);ctx.restore()}
 function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
 const STATUS_COL={working:'#fbbf24',done:'#4ade80',error:'#f87171',idle:'#666c93',talk:'#60a5fa'};
 function statusOf(a,now){if(a.bubble&&a.bubble.until>now&&a.bubble.kind==='talk')return'talk';return a.status}
@@ -422,13 +441,16 @@ function drawOverlay(now){
   c.font='600 15px "Pixelify Sans", monospace';c.textAlign='center';c.textBaseline='middle';
   for(const r of ROOMS){const p=iso((r.x0+r.x1)/2,r.y1-.8);const w=c.measureText(r.name).width+16;
     c.fillStyle='rgba(10,11,22,.55)';rr(c,p[0]*S-w/2,p[1]*S-11,w,22,4);c.fill();c.fillStyle=r.edge;c.fillText(r.name,p[0]*S,p[1]*S+1)}
-  // quality number on the wall
-  const qp=iso(23.6,0,27);c.font='600 30px "Pixelify Sans", monospace';
-  c.fillStyle=office.quality==null?'#3a5560':office.quality>=85?'#4ade80':office.quality>=70?'#fbbf24':'#f87171';
-  c.fillText(office.quality==null?'Q --':'Q '+office.quality,qp[0]*S,qp[1]*S);
-  // kanban labels
-  c.font='12px "Pixelify Sans", monospace';c.fillStyle='#9ba1c6';
-  STAGES.forEach((s,k)=>{const p=iso(11.1+k*1.48,0,21.5);c.fillText(s.toUpperCase(),p[0]*S,p[1]*S)});
+  // wall text, skewed onto the wall planes
+  wallText('PLAN',2.35,31,15,'#5350d1','y',600);
+  ['PLAN','CODE','QA','TEST','SHIP'].forEach((n,k)=>{const done=k<office.stage,cur=k===office.stage&&office.running;
+    wallText(n,KX(k)+KW/2,33.8,11,done?'#86efac':cur?'#fde68a':'#8b90b8','y',600)});
+  wallText('QUALITY',23.5,33.5,12,'#7fb6c4','y',600);
+  const q=office.quality;
+  wallText(q==null?'--':String(q),23.5,27,34,q==null?'#2f4a55':q>=85?'#4ade80':q>=70?'#fbbf24':'#f87171','y',600);
+  wallText(q==null?'awaiting review':'out of 100',23.5,21.5,10,'#6f93a0','y',400);
+  ctx.save();ctx.shadowColor='#8b7fe8';ctx.shadowBlur=office.running?14:7;
+  wallText('APEX SOCIETY',13.25,37,15,office.running?'#c4bdff':'#9d93ee','x',600);ctx.restore();
   // selection ring
   if(selected&&selected.sx!=null){c.strokeStyle='#8b7fe8';c.lineWidth=2;c.beginPath();c.ellipse(selected.sx*S+1,selected.fy*S,16,7,0,0,7);c.stroke()}
   // tags and bubbles (sorted so lower characters draw on top)
@@ -531,7 +553,7 @@ function showUsage(u,sbx,demo){
 // ── event handling (same protocol as server.py) ───────────────────────────────
 function startRun(){
   if(office.running)return;
-  Object.assign(office,{running:true,stage:0,notes:0,quality:null,files:0,sandbox:[],events:0,lastFeed:[]});
+  Object.assign(office,{stageCount:[0,0,0,0,0],running:true,stage:0,notes:0,quality:null,files:0,sandbox:[],events:0,lastFeed:[]});
   rack.mode='idle';$('pQ').textContent='—';$('pFiles').textContent='0';$('pTok').textContent='—';$('pStage').textContent='plan';
   $('dlBtn').style.display='none';$('usage').style.display='none';renderSandbox();
   for(const a of AG){clearIdle(a);a.status='idle';a.act='Waiting for work';a.log=[];a.stats=null;a.busyIdle=false;a.bubble=null;
@@ -539,7 +561,7 @@ function startRun(){
   setStatus(office.demo?'OFFLINE DEMO':'RUNNING');$('runBtn').disabled=true;
 }
 function endRun(m){
-  office.running=false;office.stage=5;$('pStage').textContent='shipped';
+  office.running=false;office.stage=5;office.stageCount=office.stageCount.map(n=>Math.max(n,1));$('pStage').textContent='shipped';
   setStatus(office.demo?'DEMO DONE':'DONE');$('runBtn').disabled=false;
   for(const a of AG){a.jump=2.2;if(a.status==='working'){a.status='done';a.doneAt=performance.now()}}
   bubble(AGM.DocWriter,'shipped!',3000,'ok');
@@ -592,7 +614,7 @@ function onAgentEvent(m){
   if(!office.running)startRun();
   feed(name,msg);
   a.log.push({t:Date.now(),st,msg});if(a.log.length>40)a.log.shift();
-  if(STAGE_OF[name]!=null&&st==='running'){office.stage=STAGE_OF[name];$('pStage').textContent=STAGES[office.stage]}
+  if(STAGE_OF[name]!=null&&st==='running'){office.stage=STAGE_OF[name];office.stageCount[office.stage]++;$('pStage').textContent=STAGES[office.stage]}
   clearIdle(a);a.act=msg||st;
   const fm=msg.match(/(\d+) files?/);if(fm){office.files=+fm[1];$('pFiles').textContent=fm[1]}
   const qm=msg.match(/score (\d+)\/100/);if(qm){office.quality=+qm[1];$('pQ').textContent=qm[1]+'/100'}

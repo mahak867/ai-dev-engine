@@ -80,9 +80,5 @@ curl http://127.0.0.1:8000/api/health
 # {"status":"ok"}
 
 curl http://127.0.0.1:8000/mcp/tools
-# lists the 8 typed tools (7 agents + static benchmark summary)
-
-python alibaba_cloud_proof.py
-# ✓ ALIBABA CLOUD CONNECTION VERIFIED
-# ✓ APEX SOCIETY IS RUNNING ON ALIBABA CLOUD
+# lists the 8 typed tools (the society's 7 LLM agents + a static benchmark summary)
 ```
