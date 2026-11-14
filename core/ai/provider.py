@@ -97,9 +97,8 @@ PAID_MODELS = [m for m, i in MODELS.items() if not i["free"]]
 VISION_MODELS = [m for m, i in MODELS.items() if i.get("vision")]
 
 # ── Cascades — Qwen 3.7 first, legacy Qwen second, Groq fallback ──────────────
-# FREE quota cascades — qwen3.7-plus is primary (999,597 free tokens remaining
-# on Token Plan, same Qwen 3.7 family, vision-capable).
-# qwen3.7-max exhausted free quota — now pay-as-you-go only, kept as fallback.
+# Tried in order until one provider answers. Pin a single model for every agent
+# with APEX_MODEL (the eval harness does this so comparisons are fair).
 DEFAULT_CASCADE = [
     "qwen/qwen3.7-plus",
     "qwen/qwen-plus",
