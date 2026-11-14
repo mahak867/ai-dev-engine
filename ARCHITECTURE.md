@@ -8,7 +8,7 @@
                        │ HTTP / WebSocket
                        ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              LIVE DASHBOARD (dashboard.html)                 │
+│              LIVE OFFICE (dashboard.html)                    │
 │   SVG force graph · animateMotion dots · ghost characters    │
 │   Real-time log · Benchmark view · Security panel           │
 └──────────────────────┬──────────────────────────────────────┘
