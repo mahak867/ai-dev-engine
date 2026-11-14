@@ -622,6 +622,17 @@ async def serve_dashboard():
     return {"message": "APEX Society API — dashboard.html not found"}
 
 
+_CLASSIC = Path(__file__).resolve().parent / "dashboard-classic.html"
+
+
+@app.get("/classic")
+async def serve_classic():
+    """The original node-graph dashboard."""
+    if _CLASSIC.exists():
+        return FileResponse(_CLASSIC)
+    return _not_found()
+
+
 if __name__ == "__main__":
     import uvicorn
 

@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 INCLUDE = ["Dockerfile", ".dockerignore", "requirements.txt", "server.py", "mcp_server.py",
-           "benchmark.py", "dashboard.html", "LICENSE", "core"]
+           "benchmark.py", "dashboard.html", "dashboard-classic.html", "LICENSE", "core"]
 
 
 def main() -> int:

@@ -8,7 +8,7 @@
                        │ HTTP / WebSocket
                        ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              LIVE DASHBOARD (dashboard.html)                 │
+│              LIVE OFFICE (dashboard.html)                    │
 │   SVG force graph · animateMotion dots · ghost characters    │
 │   Real-time log · Benchmark view · Security panel           │
 └──────────────────────┬──────────────────────────────────────┘
@@ -67,7 +67,7 @@ SECURITY BOUNDARY
 Prompt-based:  Agents instructed not to modify original inputs
 Architectural: Output written only to runs/ directory
 MCP layer:     8 typed tool functions — no raw shell execution exposed
-Evidence:      alibaba_cloud_proof.py verifies live connection
+Enforced:      path containment, Docker sandbox, auth (tests/test_security.py)
 
 AGENT COMMUNICATION PROTOCOL
 ──────────────────────────────
