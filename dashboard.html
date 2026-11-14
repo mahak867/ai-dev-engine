@@ -1,1007 +1,684 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>APEX SOCIETY</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>APEX Society Office</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Press+Start+2P&display=swap');
-*{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --bg:#0a0a0a;--bg1:#111;--bg2:#161616;--bg3:#1c1c1c;
-  --b1:#222;--b2:#2a2a2a;
-  --text:#e0e0e0;--dim:#444;--sub:#777;
-  --orange:#ff6b2b;--orange2:#faa32c;--orange3:rgba(255,107,43,0.12);
-  --green:#00ff88;--red:#ff4444;--blue:#4499ff;--pink:#ff44cc;--cyan:#00ccff;--yellow:#ffee00;
-  --mono:'Share Tech Mono',monospace;--pixel:'Press Start 2P',monospace;
-}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--mono);overflow:hidden}
-::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:#000}::-webkit-scrollbar-thumb{background:#333}
-
-/* scanlines */
-body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.04) 2px,rgba(0,0,0,0.04) 4px);pointer-events:none;z-index:9999}
-
-.shell{display:grid;grid-template-rows:auto auto auto auto 1fr auto;height:100vh;position:relative;z-index:1}
-
-/* header */
-.hdr{
-  background:#000;border-bottom:2px solid var(--orange);
-  padding:6px 16px;display:flex;align-items:center;justify-content:space-between;
-}
-.hdr-left{display:flex;align-items:center;gap:14px}
-.pac-wrap{position:relative;width:28px;height:28px}
-.pac-body{
-  position:absolute;
-  width:28px;height:28px;
-  background:var(--yellow);
-  border-radius:50%;
-  clip-path:polygon(100% 50%,100% 100%,0 100%,0 0,100% 0,100% 50%);
-  animation:munch 0.35s steps(1) infinite;
-}
-@keyframes munch{
-  0%{clip-path:polygon(60% 40%,100% 0,100% 100%,0 100%,0 0,100% 0,60% 40%)}
-  50%{clip-path:polygon(100% 50%,100% 100%,0 100%,0 0,100% 0)}
-}
-.pac-eye{position:absolute;width:5px;height:5px;background:#000;border-radius:50%;top:6px;left:12px}
-.hdr-title{font-family:var(--pixel);font-size:9px;color:var(--orange);letter-spacing:2px;text-shadow:0 0 12px var(--orange)88}
-.hdr-sub{font-size:10px;color:var(--sub);letter-spacing:0.08em}
-.hdr-stats{display:flex;gap:20px}
-.hstat{display:flex;flex-direction:column;align-items:flex-end}
-.hstat-l{font-size:9px;color:var(--dim);letter-spacing:0.08em}
-.hstat-v{color:var(--orange2);font-size:11px}
-
-/* nav */
-.nav{background:#000;border-bottom:1px solid var(--b2);display:flex;align-items:stretch}
-.nav-btn{
-  padding:5px 14px;font-size:10px;color:var(--sub);
-  cursor:pointer;border-right:1px solid var(--b1);
-  letter-spacing:0.05em;transition:all 0.1s;
-  display:flex;align-items:center;gap:5px;border-bottom:2px solid transparent;
-  background:transparent;border-top:none;border-left:none;font-family:var(--mono);
-}
-.nav-btn:hover,.nav-btn.on{color:var(--orange);background:var(--orange3);border-bottom-color:var(--orange)}
-.nav-key{color:var(--dim);font-size:9px}
-.nav-spacer{flex:1}
-.ws-pill{display:flex;align-items:center;gap:6px;padding:0 14px;font-size:9px;color:var(--sub)}
-.ws-dot{width:6px;height:6px;border-radius:50%;background:var(--dim);flex-shrink:0}
-.ws-dot.on{background:var(--green);box-shadow:0 0 7px var(--green);animation:blink 1.2s infinite}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:0.4}}
-
-/* toolbar */
-.tbar{
-  background:var(--bg1);border-bottom:1px solid var(--b1);
-  padding:7px 14px;display:flex;gap:7px;align-items:center;
-}
-.tin{
-  flex:1;background:#000;border:1px solid var(--b2);
-  padding:5px 10px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;
-  transition:border-color 0.15s;
-}
-.tin:focus{border-color:var(--orange)}
-.tin::placeholder{color:var(--dim)}
-.tbtn{
-  padding:5px 13px;background:#000;border:1px solid var(--b2);
-  color:var(--sub);font-family:var(--mono);font-size:10px;cursor:pointer;
-  letter-spacing:0.04em;transition:all 0.12s;white-space:nowrap;
-}
-.tbtn:hover{border-color:var(--orange);color:var(--orange);background:var(--orange3)}
-.tbtn.prime{border-color:var(--orange);color:var(--orange)}
-.tbtn:disabled{opacity:0.3;cursor:not-allowed}
-.kbar{background:var(--bg1);border-bottom:1px solid var(--b1);padding:5px 14px;display:flex;gap:7px;align-items:center;font-size:9px;color:var(--sub)}
-.kbar select,.kbar input[type=password]{background:#000;border:1px solid var(--b2);color:var(--text);font-family:var(--mono);font-size:10px;padding:3px 6px;outline:none}
-.kbar input[type=password]{flex:0 1 300px}
-.kbar label{display:flex;gap:4px;align-items:center;cursor:pointer}
-.kbar .note{color:var(--dim);margin-left:auto}
-.ut{width:100%;border-collapse:collapse;font-size:9px}
-.ut td,.ut th{padding:2px 4px;text-align:right;border-bottom:1px solid var(--b1)}
-.ut td:first-child,.ut th:first-child{text-align:left}
-.clk{font-size:10px;color:var(--dim);min-width:36px;text-align:right;font-variant-numeric:tabular-nums}
-
-/* main area */
-.main{display:grid;grid-template-columns:1fr 270px;overflow:hidden}
-.graph-wrap{position:relative;overflow:hidden;background:#000}
-#gsvg{width:100%;height:100%;position:absolute;inset:0}
-
-/* sidebar */
-.side{display:flex;flex-direction:column;border-left:1px solid var(--b2);overflow:hidden}
-.panel{display:flex;flex-direction:column;overflow:hidden;border-bottom:1px solid var(--b1)}
-.panel:last-child{border-bottom:none;flex:1}
-.phd{
-  padding:5px 10px;background:var(--bg1);border-bottom:1px solid var(--b1);
-  display:flex;justify-content:space-between;align-items:center;flex-shrink:0;
-}
-.phd-t{font-family:var(--pixel);font-size:7px;color:var(--orange);letter-spacing:1px}
-.phd-s{font-size:9px;color:var(--dim)}
-.pbody{flex:1;overflow-y:auto;padding:7px 9px}
-
-/* log */
-.lr{display:flex;gap:6px;padding:3px 0;border-bottom:1px solid rgba(34,34,34,0.7);font-size:10px;animation:fin 0.18s ease}
-@keyframes fin{from{opacity:0}to{opacity:1}}
-.lr:last-child{border-bottom:none}
-.lts{color:var(--dim);min-width:30px;font-size:9px}
-.lag{min-width:62px;font-weight:bold;font-size:9px}
-.lmsg{color:var(--sub);flex:1;line-height:1.4;font-size:9px}
-.cdone{color:var(--green)}.crun{color:var(--yellow)}.cerr{color:var(--red)}.crej{color:var(--red);font-weight:600}.cdlg{color:#bb88ff}
-.aPlanner{color:var(--yellow)}.aArchitect{color:var(--cyan)}.aCoder{color:#bb88ff}
-.aReviewer{color:var(--blue)}.aSelfHealer{color:var(--green)}.aDebugger{color:var(--red)}
-.aExecutor{color:#ff9900}.aMemory{color:#ff66cc}
-.aDocWriter{color:var(--sub)}.aSystem{color:var(--orange)}
-
-/* bench/sec */
-.bt{width:100%;border-collapse:collapse;font-size:9px}
-.bt th{text-align:left;padding:4px 6px;color:var(--sub);border-bottom:1px solid var(--b1);font-weight:normal;letter-spacing:0.05em}
-.bt td{padding:4px 6px;border-bottom:1px solid rgba(30,30,30,0.5);color:var(--sub)}
-.bt tr:last-child td{border-bottom:none}
-.good{color:var(--green)!important}.bad{color:var(--red)!important}.neu{color:var(--sub)!important}
-.sc{border-radius:2px;padding:7px 9px;margin-bottom:6px;font-size:9px}
-.sc-bad{border:1px solid rgba(255,68,68,0.25);background:rgba(255,68,68,0.04)}
-.sc-good{border:1px solid rgba(0,255,136,0.25);background:rgba(0,255,136,0.04)}
-.sc-t{font-weight:bold;margin-bottom:3px}
-.sc-bad .sc-t{color:var(--red)}.sc-good .sc-t{color:var(--green)}
-.sc-code{font-family:var(--mono);font-size:9px;color:var(--dim);background:#000;padding:5px 6px;margin-top:5px;line-height:1.7}
-.empty{text-align:center;padding:18px;color:var(--dim);font-size:10px}
-
-/* live agent dialogue feed */
-.dlg-feed{display:flex;flex-direction:column;gap:6px;max-height:100%;overflow-y:auto}
-.dlg-row{border-radius:2px;padding:6px 8px;font-size:9px;border:1px solid var(--b1);background:#0c0c0c}
-.dlg-row.sc-bad{border-color:rgba(255,68,68,0.25);background:rgba(255,68,68,0.04)}
-.dlg-row.sc-good{border-color:rgba(0,255,136,0.25);background:rgba(0,255,136,0.04)}
-.dlg-meta{display:flex;justify-content:space-between;color:var(--sub);margin-bottom:3px;letter-spacing:0.03em}
-.dlg-arrow{color:#bb88ff;font-weight:600}
-.dlg-type{text-transform:uppercase;color:var(--dim);font-size:8px}
-.dlg-content{color:var(--sub);line-height:1.5}
-.dlg-row.sc-bad .dlg-arrow{color:var(--red)}
-.dlg-row.sc-good .dlg-arrow{color:var(--green)}
-
-/* statusbar */
-.sbar{background:#000;border-top:1px solid var(--orange);padding:3px 12px;display:flex;gap:22px;align-items:center}
-.si{display:flex;gap:7px;align-items:center;font-size:10px}
-.sl{color:var(--dim)}.sv{color:var(--orange2);font-weight:bold;min-width:28px}
+:root{--bg:#0e0f1d;--panel:#16172a;--panel2:#1d1f36;--line:#2b2e4c;--text:#e8e9f6;--sub:#9ba1c6;--dim:#666c93;--green:#4ade80;--amber:#fbbf24;--red:#f87171;--violet:#8b7fe8;--pix:'Pixelify Sans',ui-monospace,monospace;--mono:'IBM Plex Mono',ui-monospace,monospace}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px}
+.top{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.brand{font-family:var(--pix);font-size:19px;letter-spacing:.5px;display:flex;align-items:center;gap:10px}
+.brand i{width:12px;height:12px;background:var(--violet);transform:rotate(45deg);display:inline-block}
+.clock{font-family:var(--pix);font-size:19px;margin-left:8px}
+.date{color:var(--sub);font-size:12px}
+.spacer{flex:1}
+.pill{display:inline-flex;gap:6px;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:4px 10px;font-size:12px;color:var(--sub);white-space:nowrap}
+.pill b{color:var(--text);font-weight:500}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--dim);display:inline-block;flex:none}
+.dot.on{background:var(--green)}.dot.busy{background:var(--amber)}.dot.err{background:var(--red)}.dot.talk{background:#60a5fa}
+.feed{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:6px 14px;font-size:12px;color:var(--sub);background:#121325;border-bottom:1px solid var(--line)}
+.feed b{font-weight:500}
+.controls{display:flex;gap:8px;padding:8px 14px;align-items:center;flex-wrap:wrap;background:var(--panel);border-bottom:1px solid var(--line)}
+input[type=text],input[type=password],select{background:#0a0b17;border:1px solid var(--line);color:var(--text);font-family:var(--mono);font-size:12px;padding:7px 10px;border-radius:6px;outline:none}
+input:focus,select:focus{border-color:var(--violet)}
+#task{flex:1 1 300px}#kkey{flex:0 1 240px}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:12px;cursor:pointer}
+button:hover{border-color:var(--violet)}
+button.primary{background:#5350d1;border-color:#5350d1}
+button:disabled{opacity:.5;cursor:default}
+a.link{color:var(--sub);font-size:12px}
+label.chk{display:flex;align-items:center;gap:5px;color:var(--sub);font-size:12px;cursor:pointer}
+.stage{background:#131427;border-bottom:1px solid var(--line)}
+canvas#world{display:block;width:100%;max-width:1440px;margin:0 auto;height:auto;image-rendering:pixelated;cursor:pointer}
+.bottom{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:16px;padding:14px;max-width:1440px;margin:0 auto}
+@media(max-width:900px){.bottom{grid-template-columns:minmax(0,1fr)}}
+h3{font-family:var(--pix);font-weight:400;font-size:16px;margin:0 0 6px}
+.legend{display:flex;gap:12px;color:var(--sub);font-size:11px;margin-bottom:8px;flex-wrap:wrap}
+.legend span{display:inline-flex;gap:5px;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px}
+.chip{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 9px;cursor:pointer;display:flex;flex-direction:column;gap:3px;min-width:0}
+.chip:hover,.chip.sel{border-color:var(--violet)}
+.chip .n{display:flex;gap:7px;align-items:center;font-size:12px;font-weight:500}
+.chip .sw{width:10px;height:10px;border-radius:2px;flex:none}
+.chip .r{margin-left:auto;color:var(--dim);font-weight:400;font-size:11px}
+.chip .act{font-size:11px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip.pass{border-color:#2f6b45}.chip.fail{border-color:#7a3333}.chip.run{border-color:#7a6326}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:12px}
+.card .muted{color:var(--sub);font-size:12px}
+.log{margin:8px 0 0;padding:0;list-style:none;font-size:11px;color:var(--sub)}
+.log li{padding:3px 0;border-top:1px solid var(--line)}
+table.ut{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px}
+table.ut td,table.ut th{padding:3px 4px;text-align:right;border-bottom:1px solid var(--line);font-weight:400}
+table.ut td:first-child,table.ut th:first-child{text-align:left}
+table.ut th{color:var(--sub)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 </style>
 </head>
 <body>
-<div class="shell">
+<h1 class="sr">APEX Society office: nine AI agents working as tiny characters in a pixel-art office</h1>
 
-<div class="hdr">
-  <div class="hdr-left">
-    <div class="pac-wrap"><div class="pac-body"></div><div class="pac-eye"></div></div>
-    <span class="hdr-title">APEX SOCIETY</span>
-    <span class="hdr-sub">9-AGENT SYSTEM · MULTI-PROVIDER</span>
-  </div>
-  <div class="hdr-stats">
-    <div class="hstat"><span class="hstat-l">AGENTS</span><span class="hstat-v" id="hsA">0/9</span></div>
-    <div class="hstat"><span class="hstat-l">FILES</span><span class="hstat-v" id="hsF">0</span></div>
-    <div class="hstat"><span class="hstat-l">QUALITY</span><span class="hstat-v" id="hsQ">—</span></div>
-    <div class="hstat"><span class="hstat-l">CVEs</span><span class="hstat-v" id="hsC" style="color:var(--red)">0</span></div>
-  </div>
+<div class="top">
+  <div class="brand"><i></i>APEX SOCIETY OFFICE</div>
+  <span class="clock" id="clk">00:00:00</span><span class="date" id="date"></span>
+  <span class="spacer"></span>
+  <span class="pill"><span class="dot busy"></span><b id="pWork">0</b> working of 9</span>
+  <span class="pill"><b id="pEvents">0</b> events</span>
+  <span class="pill"><b id="pFiles">0</b> files</span>
+  <span class="pill">stage <b id="pStage">idle</b></span>
+  <span class="pill">quality <b id="pQ">—</b></span>
+  <span class="pill"><b id="pTok">—</b> tokens</span>
+  <span class="pill"><span class="dot" id="connDot"></span><b id="pStatus">IDLE</b></span>
+</div>
+<div class="feed" id="feed">Feed: the team is waiting for a task</div>
+
+<div class="controls">
+  <input id="task" type="text" maxlength="500" placeholder="Describe an app to build, like: todo API with auth and tests">
+  <button class="primary" id="runBtn">Run</button>
+  <select id="kprov" title="Provider for your key"><option value="groq">Groq</option><option value="openrouter">OpenRouter</option><option value="qwen">Qwen</option></select>
+  <input id="kkey" type="password" autocomplete="off" spellcheck="false" placeholder="Your API key (used for this run only)">
+  <label class="chk" title="Canned agent outputs through the real pipeline, no key needed"><input type="checkbox" id="kreplay"> demo replay</label>
+  <button id="dlBtn" style="display:none">Download ZIP</button>
+  <a class="link" href="/classic">classic view</a>
 </div>
 
-<div class="nav">
-  <button class="nav-btn on" onclick="setTab('agents',this)"><span class="nav-key">[1]</span> AGENTS</button>
-  <button class="nav-btn" onclick="setTab('bench',this)"><span class="nav-key">[2]</span> BENCHMARK</button>
-  <button class="nav-btn" onclick="setTab('security',this)"><span class="nav-key">[3]</span> SECURITY</button>
-  <button class="nav-btn" onclick="setTab('memory',this)"><span class="nav-key">[4]</span> MEMORY</button>
-  <div class="nav-spacer"></div>
-  <div class="ws-pill"><div class="ws-dot" id="wsd"></div><span id="wst">offline</span></div>
-</div>
+<div class="stage"><canvas id="world" aria-label="Isometric office with nine agents"></canvas></div>
 
-<div class="tbar">
-  <input class="tin" id="tin" type="text" value="build a REST API with JWT auth, CRUD operations, and PostgreSQL" placeholder="describe what to build..."/>
-  <button class="tbtn prime" id="runBtn" onclick="doRun()">▶ RUN</button>
-  <button class="tbtn" onclick="doBench()">⚡ BENCH</button>
-  <button class="tbtn" onclick="doReset()">↺ RESET</button>
-  <button class="tbtn" id="dlBtn" style="display:none;background:#0a1f0d;border-color:#3B6D11;color:#97C459" title="Download generated files as ZIP">⬇ ZIP</button>
-  <span class="clk" id="clk">00:00</span>
-</div>
-<div class="kbar" id="kbar">
-  <span>LLM</span>
-  <select id="kprov" title="provider for your key"><option value="groq">Groq (free tier)</option><option value="openrouter">OpenRouter</option><option value="qwen">Qwen / DashScope</option></select>
-  <input id="kkey" type="password" autocomplete="off" spellcheck="false" placeholder="your API key — sent only with your run, never stored"/>
-  <label title="Canned agent outputs through the real pipeline — no key, no cost"><input type="checkbox" id="kreplay"/> demo replay (no key)</label>
-  <span class="note" id="knote">leave empty to use the server's own keys</span>
-</div>
-
-<div class="main">
-  <div class="graph-wrap" id="gw">
-    <svg id="gsvg" viewBox="-400 -300 800 600"></svg>
-  </div>
-  <div class="side">
-    <div class="panel" style="flex:1.3">
-      <div class="phd"><span class="phd-t">EXEC LOG</span><span class="phd-s" id="lc">0 events</span></div>
-      <div class="pbody" id="lp"><div class="empty">waiting...</div></div>
+<div class="bottom">
+  <div>
+    <h3>Agents — 9</h3>
+    <div class="legend">
+      <span><i class="dot busy"></i>working</span><span><i class="dot talk"></i>talking</span>
+      <span><i class="dot on"></i>done</span><span><i class="dot"></i>idle</span><span><i class="dot err"></i>error / rejected</span>
     </div>
-    <div class="panel" style="flex:1" id="dynPanel">
-      <div class="phd"><span class="phd-t" id="dynT">BENCHMARK</span></div>
-      <div class="pbody" id="dynB"><div class="empty">click benchmark</div></div>
-    </div>
+    <div class="grid" id="roster"></div>
+    <h3 style="margin-top:14px">Sandbox runs — <span id="sbCount">0</span></h3>
+    <div class="legend"><span><i class="dot busy"></i>running</span><span><i class="dot on"></i>passed</span><span><i class="dot err"></i>failed</span><span>network off · read-only · capped CPU and memory</span></div>
+    <div class="grid" id="sandbox"></div>
+  </div>
+  <div>
+    <div class="card" id="info"><h3>Inspector</h3><div class="muted">Click a worker in the office or in the list to see what they're doing.</div></div>
+    <div class="card" id="usage" style="display:none"></div>
   </div>
 </div>
-
-<div class="sbar">
-  <div class="si"><span class="sl">STATUS</span><span class="sv" id="sbS">IDLE</span></div>
-  <div class="si"><span class="sl">SESSION</span><span class="sv" id="sbSess">—</span></div>
-  <div class="si"><span class="sl">AGENTS</span><span class="sv" id="sbA">0/9</span></div>
-  <div class="si"><span class="sl">FILES</span><span class="sv" id="sbF">0</span></div>
-  <div style="flex:1"></div>
-  <span style="font-size:9px;color:var(--dim)">APEX SOCIETY v3.1 · 9 AGENTS · press 1-3 to navigate</span>
-</div>
-
-</div><!-- .shell -->
 
 <script>
-// ── security helpers ───────────────────────────────────────────────────────────
-// Anything from the server (task text, model output, lessons) is untrusted and
-// must be escaped before it goes into innerHTML — model output is an XSS vector.
+// ── helpers ───────────────────────────────────────────────────────────────────
 function esc(v){return String(v==null?'':v).replace(/[&<>"'`]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;'}[c]))}
-function cls(v){return String(v==null?'':v).replace(/[^A-Za-z0-9_-]/g,'')}
-// Optional API token (needed when the server sets APEX_API_TOKEN). Pass it once
-// as /#token=... ; it is kept in sessionStorage and stripped from the URL bar.
 const APEX_TOKEN=(()=>{try{
   const m=location.hash.match(/token=([^&]+)/);
   if(m){sessionStorage.setItem('apexToken',decodeURIComponent(m[1]));history.replaceState(null,'',location.pathname+location.search)}
   return sessionStorage.getItem('apexToken')||'';
 }catch(e){return ''}})();
-function apiFetch(url,opts={}){
-  const h=Object.assign({},opts.headers||{});
-  if(APEX_TOKEN) h['Authorization']='Bearer '+APEX_TOKEN;
-  return fetch(url,Object.assign({},opts,{headers:h}));
-}
+function apiFetch(url,opts={}){const h=Object.assign({},opts.headers||{});if(APEX_TOKEN)h['Authorization']='Bearer '+APEX_TOKEN;return fetch(url,Object.assign({},opts,{headers:h}))}
 function tokenQS(){return APEX_TOKEN?('?token='+encodeURIComponent(APEX_TOKEN)):''}
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+function shade(h,f){const n=parseInt(h.slice(1),16);const m=v=>Math.max(0,Math.min(255,Math.round(f<0?v*(1+f):v+(255-v)*f)));
+  return '#'+((1<<24)|(m(n>>16)<<16)|(m((n>>8)&255)<<8)|m(n&255)).toString(16).slice(1)}
+const $=id=>document.getElementById(id);
 
-// ── SVG namespace ──────────────────────────────────────────────────────────────
-const NS = 'http://www.w3.org/2000/svg';
-function s(tag){return document.createElementNS(NS,tag)}
+// ── world geometry ────────────────────────────────────────────────────────────
+const S=3, LW=480, LH=262, GW=28, GH=20, OX=208, OY=54, WH=44;
+const cv=$('world'); cv.width=LW*S; cv.height=LH*S;
+const ctx=cv.getContext('2d');
+const lo=document.createElement('canvas'); lo.width=LW; lo.height=LH; const g=lo.getContext('2d');
+const st=document.createElement('canvas'); st.width=LW; st.height=LH; const sg=st.getContext('2d');
+function iso(x,y,z){return [OX+(x-y)*8, OY+(x+y)*4-(z||0)]}
+function poly(c,pts,fill){c.beginPath();c.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)c.lineTo(pts[i][0],pts[i][1]);c.closePath();c.fillStyle=fill;c.fill()}
+function box(c,x,y,w,d,h,z,top,left,right){
+  const A=iso(x,y,z+h),B=iso(x+w,y,z+h),C=iso(x+w,y+d,z+h),D=iso(x,y+d,z+h),Cb=iso(x+w,y+d,z),Db=iso(x,y+d,z),Bb=iso(x+w,y,z);
+  poly(c,[D,C,Cb,Db],left||shade(top,-.2)); poly(c,[B,C,Cb,Bb],right||shade(top,-.38)); poly(c,[A,B,C,D],top);
+}
+function wallY(c,x1,x2,z1,z2,col){poly(c,[iso(x1,0,z1),iso(x2,0,z1),iso(x2,0,z2),iso(x1,0,z2)],col)}
+function wallX(c,y1,y2,z1,z2,col){poly(c,[iso(0,y1,z1),iso(0,y2,z1),iso(0,y2,z2),iso(0,y1,z2)],col)}
+function px(c,p,col){c.fillStyle=col;c.fillRect(Math.round(p[0]),Math.round(p[1]),1,1)}
 
-// ── agent config ───────────────────────────────────────────────────────────────
-const AG = [
-  {id:'Planner',   col:'#ffee00', lbl:'planner',   x:0,    y:-220},
-  {id:'Architect', col:'#00ccff', lbl:'architect', x:220,  y:-100},
-  {id:'Coder',     col:'#bb88ff', lbl:'coder',     x:220,  y:110},
-  {id:'Reviewer',  col:'#4499ff', lbl:'reviewer',  x:0,    y:220},
-  {id:'SelfHealer',col:'#00ff88', lbl:'healer',    x:-220, y:110},
-  {id:'Debugger',  col:'#ff4444', lbl:'debugger',  x:-220, y:-100},
-  {id:'DocWriter', col:'#888888', lbl:'docs',      x:0,    y:0},
-  {id:'Executor',  col:'#ff9900', lbl:'executor',  x:0,    y:130},
-  {id:'Memory',    col:'#ff66cc', lbl:'memory',    x:-120, y:-220},
+const ROOMS=[
+  {id:'plan',  name:'PLANNING',     x0:0, x1:9, y0:0,y1:8, c1:'#3a3468',c2:'#403a73',edge:'#8b7fe8'},
+  {id:'build', name:'BUILD FLOOR',  x0:9, x1:19,y0:0,y1:8, c1:'#2a3a66',c2:'#304172',edge:'#60a5fa'},
+  {id:'review',name:'REVIEW',       x0:19,x1:28,y0:0,y1:8, c1:'#22464b',c2:'#284f54',edge:'#2dd4bf'},
+  {id:'docs',  name:'DOCS + MEMORY',x0:0, x1:9, y0:8,y1:20,c1:'#2d4430',c2:'#334b35',edge:'#97c459'},
+  {id:'lounge',name:'LOUNGE',       x0:9, x1:19,y0:8,y1:20,c1:'#4a3a30',c2:'#524136',edge:'#f0997b'},
+  {id:'server',name:'SERVER ROOM',  x0:19,x1:28,y0:8,y1:20,c1:'#23252e',c2:'#292b35',edge:'#f59e0b'},
 ];
-const EDGES=[
-  ['Planner','Architect'],['Planner','DocWriter'],['Planner','Coder'],
-  ['Architect','Coder'],['Coder','Reviewer'],
-  ['Reviewer','SelfHealer'],['SelfHealer','Debugger'],
-  ['Debugger','Executor'],['Executor','DocWriter'],
-  ['DocWriter','Reviewer'],['Memory','Planner'],
+const roomAt=(x,y)=>ROOMS.find(r=>x>=r.x0&&x<r.x1&&y>=r.y0&&y<r.y1);
+const VDOOR={9:[3,4,13,14],19:[3,4,13,14]}, HDOOR=[6,7,13,14,15,22,23];
+
+// ── furniture ─────────────────────────────────────────────────────────────────
+const blocked=new Set(); const OBJ=[]; const DESKS={};
+const block=(x,y)=>blocked.add(x+','+y);
+function addObj(o){OBJ.push(o);return o}
+function addDesk(x,y,owner){
+  block(x,y);block(x+1,y);
+  const d={owner,x,y};DESKS[owner||('spare'+x+y)]=d;
+  addObj({key:x+1+y+.5,draw:(c,t)=>{
+    box(c,x+.05,y+.1,1.9,.8,7,0,'#b98a56','#94693e','#7a5530');
+    box(c,x+.55,y+.15,.9,.25,6,7,'#20223a','#2a2d4a','#181a2c');
+    const a=owner&&AGM[owner]; const on=a&&a.sitting&&(a.status==='working'||a.busyIdle)&&dist(a,a.seat)<.1;
+    const s1=iso(x+.6,y+.4,8.5),s2=iso(x+1.4,y+.4,8.5),s3=iso(x+1.4,y+.4,12),s4=iso(x+.6,y+.4,12);
+    poly(c,[s1,s2,s3,s4],on?'#7fd4ff':(a?'#2f3c63':'#262840'));
+    if(on){for(let i=0;i<4;i++){if(((t*6+i*3+x)|0)%3)px(c,iso(x+.7+i*.17,y+.4,9.5+(i%3)),'#e8fbff')}}
+    box(c,x+.6,y+.55,.7,.2,1,7,'#3a3d58');
+  }});
+  return d;
+}
+function addChair(x,y){addObj({key:x+y+.95,draw:c=>{box(c,x+.25,y+.3,.5,.45,3,0,'#3b3f5c');box(c,x+.25,y+.68,.5,.1,5,3,'#4a4f70')}})}
+function addRack(x,y,i){block(x,y);addObj({key:x+y+1,draw:(c,t)=>{
+  box(c,x+.1,y+.1,.8,.8,30,0,'#2a2c3e','#1f2130','#181a26');
+  for(let r=0;r<7;r++)for(let k=0;k<3;k++){
+    const p=iso(x+.25+k*.22,y+.9,5+r*3.6);
+    px(c,p,rackLed(i,r,k,t));
+  }
+  px(c,iso(x+.9,y+.3,26),'#555a7a');
+}})}
+function rackLed(i,r,k,t){
+  const h=Math.sin(i*12.9+r*78.2+k*37.7)*43758.5%1;
+  if(rack.mode==='busy') return ((t*9+h*10)|0)%3===0?'#fbbf24':(((t*5+h*7)|0)%2?'#4ade80':'#1c3a28');
+  if(rack.mode==='pass') return '#4ade80';
+  if(rack.mode==='fail') return ((t*4)|0)%2?'#f87171':'#3a1c1c';
+  return ((t*1.3+h*5)|0)%4===0?'#4ade80':'#1c3a28';
+}
+function addPlant(x,y){block(x,y);addObj({key:x+y+1,draw:c=>{box(c,x+.3,y+.3,.4,.4,4,0,'#b5653a');
+  const p=iso(x+.5,y+.5,10);c.fillStyle='#3f8f3a';c.beginPath();c.ellipse(p[0],p[1],4,4,0,0,7);c.fill();c.fillStyle='#5cb85c';c.fillRect(p[0]-2,p[1]-4,2,2);c.fillRect(p[0]+1,p[1]-2,2,2)}})}
+
+// layout
+addDesk(2,3,'Planner');addDesk(5,3,'Architect');
+addDesk(11,2,'Coder');addDesk(15,2,'Debugger');addDesk(11,5,'SelfHealer');addDesk(15,5,null);
+addDesk(21,2,'Reviewer');
+addDesk(3,11,'DocWriter');addDesk(3,15,'Memory');
+addDesk(21,11,'Executor');
+[[2,4],[5,4],[11,3],[15,3],[11,6],[15,6],[21,3],[3,12],[3,16],[21,12]].forEach(([x,y])=>addChair(x,y));
+// review table
+for(let x=23;x<25;x++)for(let y=5;y<7;y++)block(x,y);
+addObj({key:24+6,draw:c=>{box(c,23.1,5.1,1.8,1.8,6,0,'#4d7c80');box(c,23.4,5.5,.5,.6,.5,6,'#f4f1e8');box(c,24.1,5.3,.5,.6,.5,6,'#f4f1e8')}});
+// archive cabinets and shelf
+for(let y=10;y<14;y++){block(0,y);addObj({key:y+1,draw:c=>{box(c,0,y,1,1,16,0,'#6f8a62','#5d7752','#4a6141');for(let k=0;k<3;k++){px(c,iso(1,y+.5,4+k*5),'#c9d6c0')}}})}
+for(let y=15;y<19;y++){block(0,y);addObj({key:y+1,draw:c=>{box(c,0,y,1,1,22,0,'#7a5530','#6a4a2a','#5a3f24');
+  const cols=['#e24b4a','#60a5fa','#fbbf24','#97c459','#8b7fe8'];for(let s=0;s<3;s++)for(let k=0;k<4;k++)px(c,iso(1,y+.15+k*.22,4+s*6),cols[(y+s+k)%5])}})}
+// lounge
+block(17,9);addObj({key:17+9+1,draw:(c,t)=>{box(c,17.15,9.15,.7,.7,12,0,'#3a3d55');px(c,iso(17.5,9.85,9),'#f87171');
+  if(spotTaken(COFFEE)){for(let i=0;i<3;i++)px(c,iso(17.5,9.6,14+((t*6+i*3)%8)),'rgba(255,255,255,.6)')}}});
+block(17,12);addObj({key:17+12+1,draw:c=>{box(c,17.2,12.2,.6,.6,9,0,'#cfd6e6');box(c,17.25,12.25,.5,.5,5,9,'#7fb6e8')}});
+for(let x=10;x<13;x++)block(x,18);
+addObj({key:11.5+18.5,draw:c=>{box(c,10,18.1,3,.8,5,0,'#d8765a');box(c,10,18.6,3,.3,9,0,'#c0634a');box(c,10,18.1,.3,.8,8,0,'#c0634a');box(c,12.7,18.1,.3,.8,8,0,'#c0634a')}});
+for(let x=13;x<15;x++)for(let y=12;y<14;y++)block(x,y);
+addObj({key:14+13,draw:c=>{box(c,13.1,12.1,1.8,1.8,5,0,'#9c7a52');box(c,13.6,12.6,.3,.3,2,5,'#f4f1e8')}});
+addPlant(8,9);addPlant(18,17);addPlant(9,19);addPlant(8,1);addPlant(18,1);addPlant(27,1);addPlant(8,19);
+// server racks
+let ri=0;for(const x of [24,26])for(const y of [10,12,14,16])addRack(x,y,ri++);
+// partitions (glass)
+for(const X of [9,19])for(let y=0;y<GH;y++)if(!VDOOR[X].includes(y))addObj({key:X+y+.5,draw:c=>{
+  poly(c,[iso(X,y,0),iso(X,y+1,0),iso(X,y+1,15),iso(X,y,15)],'rgba(150,170,255,.10)');
+  c.fillStyle='rgba(205,215,255,.55)';const a=iso(X,y,15),b=iso(X,y+1,15);c.fillRect(Math.min(a[0],b[0]),Math.min(a[1],b[1]),1,1);
+  c.strokeStyle='rgba(205,215,255,.45)';c.lineWidth=1;c.beginPath();c.moveTo(a[0],a[1]);c.lineTo(b[0],b[1]);c.stroke()}});
+for(let x=0;x<GW;x++)if(!HDOOR.includes(x))addObj({key:x+8+.5,draw:c=>{
+  poly(c,[iso(x,8,0),iso(x+1,8,0),iso(x+1,8,15),iso(x,8,15)],'rgba(150,170,255,.10)');
+  const a=iso(x,8,15),b=iso(x+1,8,15);c.strokeStyle='rgba(205,215,255,.45)';c.lineWidth=1;c.beginPath();c.moveTo(a[0],a[1]);c.lineTo(b[0],b[1]);c.stroke()}});
+
+// ── static layer: floor, walls ────────────────────────────────────────────────
+function drawStatic(){
+  const c=sg;c.clearRect(0,0,LW,LH);
+  for(let x=0;x<GW;x++)for(let y=0;y<GH;y++){
+    const r=roomAt(x,y);poly(c,[iso(x,y),iso(x+1,y),iso(x+1,y+1),iso(x,y+1)],(x+y)%2?r.c1:r.c2);
+    if(r.id==='server'&&(x+y)%2===0)px(c,iso(x+.5,y+.5),'#3a3d4c');
+  }
+  for(let x=0;x<GW;x++)poly(c,[iso(x,GH),iso(x+1,GH),iso(x+1,GH,-6),iso(x,GH,-6)],shade(roomAt(x,GH-1).c1,-.45));
+  for(let y=0;y<GH;y++)poly(c,[iso(GW,y),iso(GW,y+1),iso(GW,y+1,-6),iso(GW,y,-6)],shade(roomAt(GW-1,y).c1,-.6));
+  for(const r of ROOMS){
+    poly(c,[iso(r.x0+.1,r.y1-.22),iso(r.x1-.1,r.y1-.22),iso(r.x1-.1,r.y1-.05),iso(r.x0+.1,r.y1-.05)],r.edge+'cc');
+    poly(c,[iso(r.x1-.22,r.y0+.1),iso(r.x1-.05,r.y0+.1),iso(r.x1-.05,r.y1-.1),iso(r.x1-.22,r.y1-.1)],r.edge+'66');
+  }
+  // walls
+  wallY(c,0,GW,0,WH,'#2c2d4b');wallX(c,0,GH,0,WH,'#24253f');
+  wallY(c,0,GW,0,3,'#1d1e33');wallX(c,0,GH,0,3,'#1a1b2e');
+  poly(c,[iso(0,0,WH),iso(GW,0,WH),iso(GW,-.35,WH),iso(-.35,-.35,WH)],'#41446e');
+  poly(c,[iso(0,0,WH),iso(0,GH,WH),iso(-.35,GH,WH),iso(-.35,-.35,WH)],'#3a3c63');
+  poly(c,[iso(GW,0,0),iso(GW,-.35,0),iso(GW,-.35,WH),iso(GW,0,WH)],'#1b1c30');
+  poly(c,[iso(0,GH,0),iso(-.35,GH,0),iso(-.35,GH,WH),iso(0,GH,WH)],'#18192b');
+  // windows on the left wall
+  for(const [a,b] of [[1,3.6],[4.4,7]]){wallX(c,a,b,14,36,'#4b4f7a');wallX(c,a+.2,b-.2,16,34,'#6fa3d8');wallX(c,a+.2,b-.2,16,22,'#8fbde6')}
+  // posters, docs room
+  wallX(c,9.6,11.6,18,34,'#d85a30');wallX(c,9.9,11.3,24,31,'#f5c4b3');
+  wallX(c,13,15.4,20,34,'#2a6f8a');wallX(c,13.3,15.1,22,26,'#9fe1cb');
+  // whiteboard / kanban / quality frames
+  wallY(c,1.4,7.2,12,35,'#9aa0c3');wallY(c,1.6,7,13,34,'#f3f4fa');
+  wallY(c,10,18,13,37,'#11121f');wallY(c,10.2,17.8,14,36,'#191b2e');
+  wallY(c,20.3,26.7,15,35,'#11121f');wallY(c,20.5,26.5,16,34,'#15232a');
+  // clock
+  wallY(c,8.2,8.9,29,36,'#e8e9f6');
+}
+
+function drawWallLive(c,t){
+  // sticky notes on the whiteboard
+  const cols=['#fbbf24','#f9a8d4','#86efac','#93c5fd'];
+  for(let i=0;i<Math.min(office.notes,14);i++){const col=i%7,row=(i/7)|0;
+    const x=1.9+col*.72,z=29-row*8;poly(c,[iso(x,0,z),iso(x+.5,0,z),iso(x+.5,0,z+5),iso(x,0,z+5)],cols[i%4])}
+  // marker lines
+  c.fillStyle='#8b7fe8';for(let i=0;i<3;i++){const p=iso(2+i*1.6,0,16);c.fillRect(p[0],p[1],4,1)}
+  // kanban: 5 columns PLAN BUILD REVIEW TEST SHIP
+  for(let k=0;k<5;k++){const x=10.5+k*1.48;
+    poly(c,[iso(x,0,15),iso(x+1.2,0,15),iso(x+1.2,0,35),iso(x,0,35)],'#22243c');
+    const done=k<office.stage, cur=k===office.stage&&office.running;
+    if(done||cur){const blink=cur&&((t*3)|0)%2;
+      poly(c,[iso(x+.15,0,27),iso(x+1.05,0,27),iso(x+1.05,0,32),iso(x+.15,0,32)],done?'#4ade80':(blink?'#fbbf24':'#a07a1c'))}
+    poly(c,[iso(x+.15,0,17),iso(x+1.05,0,17),iso(x+1.05,0,18.5),iso(x+.15,0,18.5)],'#3a3d58');
+  }
+  // quality bar
+  const q=office.quality;
+  if(q!=null){const w=5.6*q/100;poly(c,[iso(20.7,0,18),iso(20.7+w,0,18),iso(20.7+w,0,20),iso(20.7,0,20)],q>=85?'#4ade80':q>=70?'#fbbf24':'#f87171')}
+  // clock hands
+  const d=new Date(),cx=8.55,cz=32.5;const hA=(d.getHours()%12+d.getMinutes()/60)/12*Math.PI*2,mA=d.getMinutes()/60*Math.PI*2;
+  px(c,iso(cx+Math.sin(hA)*.12,0,cz+Math.cos(hA)*1.6),'#1d1e33');px(c,iso(cx+Math.sin(mA)*.25,0,cz+Math.cos(mA)*2.6),'#1d1e33');
+  // clouds drifting past the windows
+  for(const [a,b] of [[1,3.6],[4.4,7]]){const span=b-a-.6;const off=((t*.15)%span);px(c,iso(0,a+.3+off,30),'#ffffff');px(c,iso(0,a+.45+off,30),'#ffffff');px(c,iso(0,a+.38+off,31),'#ffffff')}
+}
+
+// ── agents ────────────────────────────────────────────────────────────────────
+const AGENT_DEFS=[
+  {id:'Planner',   role:'Turns the request into a plan',        room:'plan',  seat:[2,4],  shirt:'#8b7fe8',hair:'#2b2350',skin:'#f1c27d',acc:'tie'},
+  {id:'Architect', role:'Designs the structure',                room:'plan',  seat:[5,4],  shirt:'#6a5fd0',hair:'#5a3a1a',skin:'#c68642',acc:'hat'},
+  {id:'Coder',     role:'Writes every file',                    room:'build', seat:[11,3], shirt:'#3d8fe0',hair:'#1f1a17',skin:'#e0ac69',acc:'beanie',hat:'#e24b4a'},
+  {id:'Debugger',  role:'Hunts runtime errors',                 room:'build', seat:[15,3], shirt:'#2f6fb5',hair:'#7a4a2a',skin:'#ffdbac',acc:'glasses'},
+  {id:'SelfHealer',role:'Patches review and sandbox failures',  room:'build', seat:[11,6], shirt:'#55b3e8',hair:'#e6e1d3',skin:'#8d5524',acc:'cross'},
+  {id:'Reviewer',  role:'Scores 0–100, rejects bad code',       room:'review',seat:[21,3], shirt:'#1d9e75',hair:'#2c1b10',skin:'#f1c27d',acc:'glasses'},
+  {id:'DocWriter', role:'Writes the README',                    room:'docs',  seat:[3,12], shirt:'#639922',hair:'#a0522d',skin:'#ffdbac',acc:'beanie',hat:'#97c459'},
+  {id:'Memory',    role:'Remembers lessons from past runs',     room:'docs',  seat:[3,16], shirt:'#97c459',hair:'#8a8a8a',skin:'#e0ac69',acc:'none'},
+  {id:'Executor',  role:'Runs the code in the Docker sandbox',  room:'server',seat:[21,12],shirt:'#d85a30',hair:'#111111',skin:'#c68642',acc:'headset'},
 ];
+const AG=[],AGM={};
+AGENT_DEFS.forEach((d,i)=>{const a=Object.assign({},d,{x:d.seat[0],y:d.seat[1],path:[],queue:[],cur:null,status:'idle',act:'At desk',
+  sitting:true,back:true,right:true,phase:0,bubble:null,log:[],seed:i*1.7,nextIdle:performance.now()+3000+Math.random()*9000,jump:0,carry:false,busyIdle:Math.random()<.4,stats:null,talkUntil:0});
+  AG.push(a);AGM[d.id]=a});
+const COFFEE=[16,9], RACK_SPOT=[23,11], ARCHIVE=[1,11];
+const LOUNGE_SPOTS=[[16,12],[11,17],[12,17],[10,11],[15,15],[6,6],[25,6]];
+const SMALL=['coffee?','tests green?','who touched main?','ship it','lgtm','one more refactor','CI flaky again?','nice diff','need a review','pair later?'];
+const REPLY={handoff:'got it',feedback:'on it',validation:'nice',context:'thanks!',negotiation:'fair',sync:'synced',complete:'shipped'};
+const dist=(a,p)=>Math.hypot(a.x-p[0],a.y-p[1]);
+const spotTaken=p=>AG.some(a=>a.path.length===0&&dist(a,p)<.3);
 
-// ── force simulation (simple) ─────────────────────────────────────────────────
-let nodes = AG.map(a=>({...a, vx:0, vy:0, pinned:false, _wa:Math.random()*Math.PI*2}));
-let simRunning = true;
+function canMove(ax,ay,bx,by){
+  if(bx<0||by<0||bx>=GW||by>=GH)return false;
+  if(blocked.has(bx+','+by))return false;
+  if(ax!==bx){const X=Math.max(ax,bx);if(VDOOR[X]&&!VDOOR[X].includes(ay))return false}
+  if(ay!==by){const Y=Math.max(ay,by);if(Y===8&&!HDOOR.includes(ax))return false}
+  return true;
+}
+function findPath(sx,sy,tx,ty){
+  sx=Math.round(sx);sy=Math.round(sy);
+  if(sx===tx&&sy===ty)return[];
+  const prev=new Map(),q=[[sx,sy]],k=(x,y)=>x+','+y;prev.set(k(sx,sy),null);
+  while(q.length){const [x,y]=q.shift();if(x===tx&&y===ty)break;
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+dx,ny=y+dy,nk=k(nx,ny);
+      if(!prev.has(nk)&&canMove(x,y,nx,ny)){prev.set(nk,[x,y]);q.push([nx,ny])}}}
+  if(!prev.has(k(tx,ty)))return[];
+  const out=[];let c=[tx,ty];while(c&&!(c[0]===sx&&c[1]===sy)){out.unshift(c);c=prev.get(k(c[0],c[1]))}
+  return out;
+}
+function near(b){
+  const [bx,by]=b.seat;const seats=new Set(AG.map(o=>o.seat.join(',')));
+  for(const [dx,dy] of [[1,0],[-1,0],[0,1],[1,1],[-1,1],[2,0],[-2,0],[0,2]]){const x=bx+dx,y=by+dy;
+    if(x>=0&&y>=0&&x<GW&&y<GH&&!blocked.has(x+','+y)&&!seats.has(x+','+y))return[x,y]}
+  return[bx,by+1];
+}
+function enqueue(a,acts,idle){acts.forEach(x=>{x.idle=!!idle;a.queue.push(x)})}
+function clearIdle(a){a.queue=a.queue.filter(q=>!q.idle);if(a.cur&&a.cur.idle){a.cur=null;a.path=a.path.slice(0,1)}}
+function bubble(a,text,ms,kind){a.bubble={text:String(text||''),until:performance.now()+(ms||3500),kind:kind||'talk'}}
+function faceTo(a,b){const dx=b.x-a.x,dy=b.y-a.y;a.right=(dx-dy)>=0;a.back=(dx+dy)<0}
 
-function forceStep(){
-  for(let i=0;i<nodes.length;i++){
-    for(let j=i+1;j<nodes.length;j++){
-      const dx=nodes[i].x-nodes[j].x, dy=nodes[i].y-nodes[j].y;
-      const d=Math.sqrt(dx*dx+dy*dy)||1;
-      if(d<160){const f=7000/(d*d);nodes[i].vx+=dx/d*f;nodes[i].vy+=dy/d*f;nodes[j].vx-=dx/d*f;nodes[j].vy-=dy/d*f;}
+function startAction(a,q,now){
+  if(q.t==='goto'){a.path=findPath(a.x,a.y,q.to[0],q.to[1]);a.sitting=false}
+  else if(q.t==='wait'){q.until=now+q.d}
+  else if(q.t==='say'){bubble(a,q.text,q.d,q.kind)}
+  else if(q.t==='fn'){q.f()}
+  else if(q.t==='face'){a.right=q.right;a.back=q.back}
+}
+function actionDone(a,q,now){return q.t==='wait'?now>=q.until:true}
+function updateAgent(a,dt,now){
+  if(a.jump>0)a.jump-=dt;
+  if(a.status==='done'&&a.doneAt&&now-a.doneAt>7000){a.status='idle'}
+  if(a.path.length){
+    const [tx,ty]=a.path[0];const dx=tx-a.x,dy=ty-a.y,d=Math.hypot(dx,dy),sp=3.3*dt;
+    a.phase+=dt;a.sitting=false;
+    if(Math.abs(dx-dy)>.01)a.right=(dx-dy)>0;a.back=(dx<-.01||dy<-.01);
+    if(d<=sp){a.x=tx;a.y=ty;a.path.shift()}else{a.x+=dx/d*sp;a.y+=dy/d*sp}
+    return;
+  }
+  if(a.cur){if(!actionDone(a,a.cur,now))return;a.cur=null}
+  if(a.queue.length){a.cur=a.queue.shift();startAction(a,a.cur,now);return}
+  if(dist(a,a.seat)<.05){if(!a.sitting){a.sitting=true;a.back=true;a.right=true}}
+  else{enqueue(a,[{t:'goto',to:a.seat}],true);return}
+  if(now>a.nextIdle)scheduleIdle(a,now);
+}
+function scheduleIdle(a,now){
+  a.nextIdle=now+7000+Math.random()*14000;
+  if(office.running)return;
+  if(AG.filter(o=>o.path.length||o.queue.length).length>=3){a.busyIdle=Math.random()<.5;return}
+  const r=Math.random();
+  if(r<.28&&!spotTaken(COFFEE)){
+    enqueue(a,[{t:'goto',to:COFFEE},{t:'face',right:true,back:true},{t:'wait',d:2200},{t:'say',text:pick(['coffee time','refill','espresso, obviously']),d:2200},{t:'wait',d:1500},{t:'goto',to:a.seat}],true);
+  }else if(r<.55){
+    const b=pick(AG.filter(o=>o!==a));
+    enqueue(a,[{t:'goto',to:near(b)},{t:'fn',f:()=>faceTo(a,b)},{t:'say',text:pick(SMALL),d:2600},
+      {t:'fn',f:()=>setTimeout(()=>{if(!office.running)bubble(b,pick(['sure','soon','yep','not me','after this','lgtm']),2200)},1100)},
+      {t:'wait',d:3400},{t:'goto',to:a.seat}],true);
+  }else if(r<.72){
+    enqueue(a,[{t:'goto',to:pick(LOUNGE_SPOTS)},{t:'wait',d:3500+Math.random()*3000},{t:'goto',to:a.seat}],true);
+  }else a.busyIdle=!a.busyIdle;
+}
+
+// ── office state ──────────────────────────────────────────────────────────────
+const office={running:false,stage:0,notes:3,quality:null,events:0,files:0,tokens:null,sandbox:[],demo:false,session:null,lastFeed:[],confetti:[]};
+const rack={mode:'idle',until:0};
+const STAGES=['plan','build','review','test','ship'];
+const STAGE_OF={Memory:0,Planner:0,Architect:0,Coder:1,Debugger:1,SelfHealer:1,Reviewer:2,Executor:3,DocWriter:4};
+
+// ── rendering ─────────────────────────────────────────────────────────────────
+function drawChar(c,a,t){
+  const p=iso(a.x+.5,a.y+.5);let fx=Math.round(p[0]),fy=Math.round(p[1]);
+  const walking=a.path.length>0;
+  c.fillStyle='rgba(0,0,0,.35)';c.fillRect(fx-3,fy-1,7,2);
+  let bob=walking?((a.phase*8)|0)%2:0;if(a.jump>0)bob=Math.round(Math.abs(Math.sin(t*9+a.seed))*3);
+  fy-=bob;
+  const sit=a.sitting&&!walking,back=a.back,right=a.right,pants='#2a2b40';
+  if(!sit){const s=walking?((a.phase*8)|0)%2:0;
+    c.fillStyle=pants;c.fillRect(fx-2,fy-4,2,4-s);c.fillRect(fx+1,fy-4,2,3+s);
+    c.fillStyle='#121320';c.fillRect(fx-2,fy-1-s,2,1);c.fillRect(fx+1,fy-2+s,2,1);
+  }else{fy+=2;c.fillStyle=pants;c.fillRect(fx-2,fy-4,5,2)}
+  c.fillStyle=a.shirt;c.fillRect(fx-3,fy-9,7,5);
+  c.fillStyle=shade(a.shirt,-.28);c.fillRect(right?fx+3:fx-3,fy-9,1,5);
+  const typing=sit&&(a.status==='working'||a.busyIdle),up=typing&&(((t*10+a.seed)|0)%2);
+  c.fillStyle=a.skin;c.fillRect(fx-4,fy-8-(up?1:0),1,3);c.fillRect(fx+4,fy-8-(up?0:1),1,3);
+  if(a.carry){c.fillStyle='#f4f1e8';c.fillRect(right?fx+4:fx-6,fy-9,3,4);c.fillStyle='#9aa0c3';c.fillRect(right?fx+5:fx-5,fy-8,1,1)}
+  c.fillStyle=a.skin;c.fillRect(fx-2,fy-14,5,5);
+  c.fillStyle=a.hair;
+  if(back){c.fillRect(fx-2,fy-15,5,5)}
+  else{c.fillRect(fx-2,fy-15,5,2);c.fillRect(right?fx-2:fx+2,fy-13,1,2);
+    const blink=((t*0.7+a.seed)%4)<.08;if(!blink){c.fillStyle='#16161f';const e=right?1:0;c.fillRect(fx-1+e,fy-12,1,1);c.fillRect(fx+1+e,fy-12,1,1)}}
+  if(a.acc==='hat'){c.fillStyle='#f2c14e';c.fillRect(fx-3,fy-16,7,2);c.fillRect(fx-2,fy-17,5,1)}
+  else if(a.acc==='beanie'){c.fillStyle=a.hat;c.fillRect(fx-2,fy-16,5,2);c.fillRect(fx,fy-17,1,1)}
+  else if(a.acc==='headset'){c.fillStyle='#0d0d14';c.fillRect(fx-3,fy-13,1,3);c.fillRect(fx+3,fy-13,1,3);c.fillRect(fx-2,fy-16,5,1)}
+  if(a.acc==='glasses'&&!back){c.fillStyle='#d9e2ff';c.fillRect(fx-1+(right?1:0),fy-12,3,1)}
+  if(a.acc==='cross'&&!back){c.fillStyle='#ffffff';c.fillRect(fx-1,fy-8,3,3);c.fillStyle='#e24b4a';c.fillRect(fx,fy-8,1,3);c.fillRect(fx-1,fy-7,3,1)}
+  if(a.acc==='tie'&&!back){c.fillStyle='#e24b4a';c.fillRect(fx,fy-9,1,4)}
+  a.sx=fx;a.sy=fy;a.fy=Math.round(p[1]);
+}
+
+function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
+const STATUS_COL={working:'#fbbf24',done:'#4ade80',error:'#f87171',idle:'#666c93',talk:'#60a5fa'};
+function statusOf(a,now){if(a.bubble&&a.bubble.until>now&&a.bubble.kind==='talk')return'talk';return a.status}
+function wrap(c,text,maxW){const words=text.split(/\s+/);const lines=[];let cur='';
+  for(const w of words){const tst=cur?cur+' '+w:w;if(c.measureText(tst).width>maxW&&cur){lines.push(cur);cur=w;if(lines.length===2)break}else cur=tst}
+  if(lines.length<2&&cur)lines.push(cur);
+  if(lines.length===2&&words.join(' ').length>lines.join(' ').length){let l=lines[1];while(c.measureText(l+'…').width>maxW&&l.length>1)l=l.slice(0,-1);lines[1]=l+'…'}
+  return lines}
+
+function drawOverlay(now){
+  const c=ctx;
+  // room labels
+  c.font='600 15px "Pixelify Sans", monospace';c.textAlign='center';c.textBaseline='middle';
+  for(const r of ROOMS){const p=iso((r.x0+r.x1)/2,r.y1-.8);const w=c.measureText(r.name).width+16;
+    c.fillStyle='rgba(10,11,22,.55)';rr(c,p[0]*S-w/2,p[1]*S-11,w,22,4);c.fill();c.fillStyle=r.edge;c.fillText(r.name,p[0]*S,p[1]*S+1)}
+  // quality number on the wall
+  const qp=iso(23.6,0,27);c.font='600 30px "Pixelify Sans", monospace';
+  c.fillStyle=office.quality==null?'#3a5560':office.quality>=85?'#4ade80':office.quality>=70?'#fbbf24':'#f87171';
+  c.fillText(office.quality==null?'Q --':'Q '+office.quality,qp[0]*S,qp[1]*S);
+  // kanban labels
+  c.font='12px "Pixelify Sans", monospace';c.fillStyle='#9ba1c6';
+  STAGES.forEach((s,k)=>{const p=iso(11.1+k*1.48,0,21.5);c.fillText(s.toUpperCase(),p[0]*S,p[1]*S)});
+  // selection ring
+  if(selected&&selected.sx!=null){c.strokeStyle='#8b7fe8';c.lineWidth=2;c.beginPath();c.ellipse(selected.sx*S+1,selected.fy*S,16,7,0,0,7);c.stroke()}
+  // tags and bubbles (sorted so lower characters draw on top)
+  const order=[...AG].sort((a,b)=>b.sy-a.sy);const placed=[];
+  c.textAlign='left';c.textBaseline='middle';
+  for(const a of order){
+    const s=statusOf(a,now),hx=a.sx*S+1;let hy=(a.sy-19)*S;
+    c.font='500 12px "IBM Plex Mono", monospace';
+    const tw=c.measureText(a.id).width+20;
+    for(let i=0;i<4;i++){const hit=placed.find(p=>hx-tw/2<p.x+p.w&&hx+tw/2>p.x&&hy-9<p.y+p.h&&hy+9>p.y);if(!hit)break;hy=hit.y-11}
+    placed.push({x:hx-tw/2,y:hy-9,w:tw,h:18});
+    c.fillStyle=a===selected?'rgba(83,80,209,.9)':'rgba(12,13,26,.8)';rr(c,hx-tw/2,hy-9,tw,18,4);c.fill();
+    c.fillStyle=STATUS_COL[s]||'#666c93';c.beginPath();c.arc(hx-tw/2+8,hy,3.5,0,7);c.fill();
+    c.fillStyle='#e8e9f6';c.fillText(a.id,hx-tw/2+15,hy+1);
+    if(a.bubble&&a.bubble.until>now){
+      c.font='13px "IBM Plex Mono", monospace';
+      const lines=wrap(c,a.bubble.text,230);const bw=Math.max(...lines.map(l=>c.measureText(l).width))+18,bh=lines.length*17+10;
+      let bx=Math.max(4,Math.min(LW*S-bw-4,hx-bw/2)),by=hy-14-bh;
+      for(let i=0;i<6;i++){const hit=placed.find(p=>bx<p.x+p.w&&bx+bw>p.x&&by<p.y+p.h&&by+bh>p.y);if(!hit)break;by=hit.y-bh-4}
+      placed.push({x:bx,y:by,w:bw,h:bh});
+      const k=a.bubble.kind,border=k==='err'?'#f87171':k==='ok'?'#4ade80':k==='work'?'#fbbf24':a.shirt;
+      c.fillStyle='#f6f6fb';rr(c,bx,by,bw,bh,6);c.fill();c.strokeStyle=border;c.lineWidth=2;c.stroke();
+      c.fillStyle='#f6f6fb';c.beginPath();c.moveTo(hx-5,by+bh-1);c.lineTo(hx+5,by+bh-1);c.lineTo(hx,Math.min(by+bh+7,hy-9));c.fill();
+      c.fillStyle='#1b1c2e';lines.forEach((l,i)=>c.fillText(l,bx+9,by+14+i*17));
     }
   }
-  EDGES.forEach(([a,b])=>{
-    const na=nodes.find(n=>n.id===a),nb=nodes.find(n=>n.id===b);if(!na||!nb)return;
-    const dx=nb.x-na.x,dy=nb.y-na.y,d=Math.sqrt(dx*dx+dy*dy)||1,ideal=170,f=(d-ideal)*0.006;
-    na.vx+=dx/d*f;na.vy+=dy/d*f;nb.vx-=dx/d*f;nb.vy-=dy/d*f;
-  });
-  nodes.forEach(n=>{
-    if(nstate[n.id]==='running'){n._wa+=(Math.random()-0.5)*0.3;n.vx+=Math.cos(n._wa)*0.3;n.vy+=Math.sin(n._wa)*0.3;}
-    n.vx-=n.x*0.007;n.vy-=n.y*0.007;n.vx*=0.82;n.vy*=0.82;
-    const spd=Math.sqrt(n.vx*n.vx+n.vy*n.vy);if(spd>3){n.vx=n.vx/spd*3;n.vy=n.vy/spd*3;}
-    if(!n.pinned){n.x+=n.vx;n.y+=n.vy;}
-    n.x=Math.max(-330,Math.min(330,n.x));n.y=Math.max(-230,Math.min(230,n.y));
-  });
-  requestAnimationFrame(forceStep);
-  drawGraph();
 }
 
-// ── state ──────────────────────────────────────────────────────────────────────
-let nstate={}, logs=[], t0=null, ticker=null, isRunning=false;
-let doneCnt=0, fileCnt=0, cveCnt=0;
-let animDots={}; // agent→active SVG dot group
-AG.forEach(a=>{nstate[a.id]='idle'});
-
-// ── draw SVG graph ─────────────────────────────────────────────────────────────
-function getPos(id){const n=nodes.find(n=>n.id===id);return n?[n.x,n.y]:[0,0]}
-
-function buildEdgePath(ax,ay,bx,by){
-  const dx=bx-ax, dy=by-ay, dist=Math.sqrt(dx*dx+dy*dy)||1;
-  // shorten endpoints
-  const sr=28, tr=28;
-  const sRatio=sr/dist, eRatio=(dist-tr)/dist;
-  const sx=ax+dx*sRatio, sy=ay+dy*sRatio;
-  const ex=ax+dx*eRatio, ey=ay+dy*eRatio;
-  // perpendicular control point for bezier curve
-  const cx=(sx+ex)/2 + (-dy/dist)*0.3*Math.max(35,dist*0.18);
-  const cy=(sy+ey)/2 + (dx/dist)*0.3*Math.max(35,dist*0.18);
-  return `M ${sx} ${sy} Q ${cx} ${cy} ${ex} ${ey}`;
+let selected=null,lastT=performance.now();
+function frame(now){
+  const dt=Math.min(.05,(now-lastT)/1000);lastT=now;const t=now/1000;
+  AG.forEach(a=>updateAgent(a,dt,now));
+  if(rack.until&&now>rack.until&&rack.mode!=='busy'){rack.mode='idle';rack.until=0}
+  g.clearRect(0,0,LW,LH);g.drawImage(st,0,0);drawWallLive(g,t);
+  const items=OBJ.map(o=>({k:o.key,d:o.draw}));
+  AG.forEach(a=>items.push({k:a.x+a.y+1.02,d:(c,tt)=>drawChar(c,a,tt)}));
+  items.sort((p,q)=>p.k-q.k).forEach(it=>it.d(g,t));
+  // confetti
+  office.confetti=office.confetti.filter(p=>(p.life-=dt)>0);
+  for(const p of office.confetti){if(p.y>p.floor){p.vy=0;p.vx=0}else p.vy+=40*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;g.fillStyle=p.c;g.fillRect(Math.round(p.x),Math.round(p.y),2,2)}
+  ctx.imageSmoothingEnabled=false;ctx.fillStyle='#131427';ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.drawImage(lo,0,0,LW*S,LH*S);
+  drawOverlay(now);
+  requestAnimationFrame(frame);
 }
 
-function drawGraph(){
-  const svg=document.getElementById('gsvg');
+// ── UI panels ─────────────────────────────────────────────────────────────────
+function renderRoster(){
+  const now=performance.now();
+  $('roster').innerHTML=AG.map(a=>{const s=statusOf(a,now);const dc={working:'busy',done:'on',error:'err',talk:'talk'}[s]||'';
+    return `<div class="chip${a===selected?' sel':''}" data-id="${esc(a.id)}"><div class="n"><span class="sw" style="background:${a.shirt}"></span>${esc(a.id)}<span class="r"><i class="dot ${dc}"></i></span></div><div class="act">${esc(a.act)}</div></div>`}).join('');
+  $('pWork').textContent=AG.filter(a=>a.status==='working'||statusOf(a,now)==='talk').length;
+}
+$('roster').addEventListener('click',e=>{const el=e.target.closest('.chip');if(el)select(AGM[el.dataset.id])});
+function renderInfo(){
+  const a=selected;if(!a)return;
+  const s=a.stats;
+  $('info').innerHTML=`<h3><span class="sw" style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${a.shirt};margin-right:6px"></span>${esc(a.id)}</h3>
+  <div class="muted">${esc(a.role)} · ${esc(ROOMS.find(r=>r.id===a.room).name.toLowerCase())}</div>
+  <div style="margin-top:6px">Status: <b>${esc(statusOf(a,performance.now()))}</b></div>
+  ${s?`<div class="muted" style="margin-top:4px">${(s.total_tokens||0).toLocaleString()} tokens · ${esc(s.calls||0)} calls · ${esc(s.seconds||0)}s${s.cost_usd!=null?' · $'+Number(s.cost_usd).toFixed(4):''}</div>`:''}
+  <ul class="log">${a.log.slice(-7).reverse().map(l=>`<li>${new Date(l.t).toLocaleTimeString()} · ${esc(l.st)} · ${esc(l.msg.slice(0,140))}</li>`).join('')||'<li>No activity yet this run.</li>'}</ul>`;
+}
+function select(a){selected=a;renderRoster();renderInfo()}
+cv.addEventListener('click',e=>{
+  const r=cv.getBoundingClientRect(),mx=(e.clientX-r.left)*(cv.width/r.width)/S,my=(e.clientY-r.top)*(cv.height/r.height)/S;
+  let best=null,bd=1e9;for(const a of AG){if(a.sx==null)continue;const inside=mx>a.sx-6&&mx<a.sx+7&&my>a.sy-20&&my<a.fy+2;
+    const d=Math.hypot(mx-a.sx,my-(a.sy-8));if(inside&&d<bd){bd=d;best=a}}
+  select(best);
+});
+function renderSandbox(){
+  $('sbCount').textContent=office.sandbox.length;
+  if(!office.sandbox.length){$('sandbox').innerHTML='<div class="muted" style="grid-column:1/-1;color:var(--sub);font-size:12px">No sandbox runs yet. Racks light up when the server runs with APEX_SANDBOX=docker.</div>';return}
+  $('sandbox').innerHTML=office.sandbox.map(r=>{const cls={running:'run',pass:'pass',fail:'fail'}[r.state]||'';const dc={running:'busy',pass:'on',fail:'err'}[r.state]||'';
+    return `<div class="chip ${cls}" style="cursor:default"><div class="n"><i class="dot ${dc}"></i>sandbox-run-${esc(r.n)}<span class="r">${esc(r.state)}</span></div><div class="act">${esc(r.detail||'install → compile → import → pytest')}</div></div>`}).join('');
+}
+function feed(agent,msg){
+  const a=AGM[agent];const col=a?a.shirt:'#9ba1c6';
+  office.lastFeed.unshift(`<b style="color:${col}">${esc(agent)}</b> ${esc(String(msg).slice(0,110))}`);office.lastFeed=office.lastFeed.slice(0,10);
+  $('feed').innerHTML='Feed: '+office.lastFeed.join(' <span style="color:var(--dim)">│</span> ');
+  office.events++;$('pEvents').textContent=office.events;
+}
+function setStatus(txt,dotCls){$('pStatus').textContent=txt}
+function showUsage(u,sbx,demo){
+  if(!u||!u.by_agent)return;
+  for(const a of AG)a.stats=u.by_agent[a.id]||null;
+  const fmt=n=>(n||0).toLocaleString();
+  const rows=Object.entries(u.by_agent).sort((p,q)=>(q[1].total_tokens||0)-(p[1].total_tokens||0)).map(([n,d])=>
+    `<tr><td>${esc(n)}</td><td>${esc(d.calls)}</td><td>${fmt(d.total_tokens)}</td><td>${esc(d.seconds)}s</td><td>${d.cost_usd==null?'—':'$'+Number(d.cost_usd).toFixed(4)}</td></tr>`).join('');
+  const cost=u.cost_usd==null?'unknown (set APEX_PRICES)':'$'+Number(u.cost_usd).toFixed(4);
+  $('usage').style.display='block';
+  $('usage').innerHTML=`<h3>Cost and tokens${demo?' (offline demo)':''}</h3>
+   <div class="muted">${fmt(u.total_tokens)} tokens · ${esc(u.calls)} LLM calls · ${esc(u.wall_seconds)}s · ${esc(cost)}${u.estimated_tokens?' · partly estimated':''}</div>
+   ${sbx?`<div class="muted" style="margin-top:4px">Sandbox ${sbx.passed?'passed':'failed'} after ${esc(sbx.attempts)} attempt(s)</div>`:''}
+   <table class="ut"><tr><th>agent</th><th>calls</th><th>tokens</th><th>time</th><th>cost</th></tr>${rows}</table>`;
+  office.tokens=u.total_tokens;$('pTok').textContent=fmt(u.total_tokens);
+  renderInfo();
+}
 
-  // get or create layers
-  let edgeLayer=svg.querySelector('#edgeLayer');
-  let dotLayer=svg.querySelector('#dotLayer');
-  let nodeLayer=svg.querySelector('#nodeLayer');
-  if(!edgeLayer){
-    edgeLayer=s('g');edgeLayer.id='edgeLayer';svg.appendChild(edgeLayer);
-    dotLayer=s('g');dotLayer.id='dotLayer';svg.appendChild(dotLayer);
-    nodeLayer=s('g');nodeLayer.id='nodeLayer';svg.appendChild(nodeLayer);
+// ── event handling (same protocol as server.py) ───────────────────────────────
+function startRun(){
+  if(office.running)return;
+  Object.assign(office,{running:true,stage:0,notes:0,quality:null,files:0,sandbox:[],events:0,lastFeed:[]});
+  rack.mode='idle';$('pQ').textContent='—';$('pFiles').textContent='0';$('pTok').textContent='—';$('pStage').textContent='plan';
+  $('dlBtn').style.display='none';$('usage').style.display='none';renderSandbox();
+  for(const a of AG){clearIdle(a);a.status='idle';a.act='Waiting for work';a.log=[];a.stats=null;a.busyIdle=false;a.bubble=null;
+    enqueue(a,[{t:'goto',to:a.seat}])}
+  setStatus(office.demo?'OFFLINE DEMO':'RUNNING');$('runBtn').disabled=true;
+}
+function endRun(m){
+  office.running=false;office.stage=5;$('pStage').textContent='shipped';
+  setStatus(office.demo?'DEMO DONE':'DONE');$('runBtn').disabled=false;
+  for(const a of AG){a.jump=2.2;if(a.status==='working'){a.status='done';a.doneAt=performance.now()}}
+  bubble(AGM.DocWriter,'shipped!',3000,'ok');
+  for(let i=0;i<90;i++){const p=iso(4+Math.random()*20,4+Math.random()*12,30);
+    office.confetti.push({floor:p[1]+30,x:p[0],y:p[1]-20,vx:(Math.random()-.5)*60,vy:-Math.random()*50,c:pick(['#fbbf24','#f9a8d4','#86efac','#93c5fd','#8b7fe8']),life:2+Math.random()*1.5})}
+  if(m.quality_score!=null){office.quality=m.quality_score;$('pQ').textContent=m.quality_score+'/100'}
+  if(m.usage)showUsage(m.usage,m.sandbox,office.demo);
+  if(m.files!=null){office.files=m.files;$('pFiles').textContent=m.files}
+  if(office.session&&!office.demo){const b=$('dlBtn');b.style.display='inline-block';
+    b.onclick=()=>window.open(`/api/sessions/${encodeURIComponent(office.session)}/download`+tokenQS(),'_blank')}
+  AG.forEach(a=>a.nextIdle=performance.now()+5000+Math.random()*8000);
+}
+function onSandbox(a,st,msg){
+  const m=msg.match(/Sandbox run (\d+)/);
+  if(st==='running'){rack.mode='busy';rack.until=0;
+    if(m){office.sandbox.push({n:m[1],state:'running',detail:''});renderSandbox()}
+    enqueue(a,[{t:'goto',to:RACK_SPOT},{t:'face',right:true,back:true},{t:'wait',d:2600},{t:'goto',to:a.seat}]);
+    return}
+  const last=office.sandbox[office.sandbox.length-1];
+  if(/Sandbox (passed|failed|skipped)/.test(msg)){
+    const pass=/passed/.test(msg);rack.mode=pass?'pass':'fail';rack.until=performance.now()+5000;
+    if(last&&last.state==='running'){last.state=/skipped/.test(msg)?'skipped':pass?'pass':'fail';last.detail=msg.replace(/^.*?Sandbox \w+:\s*/,'')}
+    renderSandbox();
+  }else if(st!=='running'&&rack.mode==='busy'){rack.mode=st==='error'?'fail':'idle';rack.until=performance.now()+3000}
+}
+function onDialogue(d){
+  const A=AGM[d.from],B=AGM[d.to];
+  feed(d.from,`→ ${d.to}: ${d.content}`);
+  if(!A)return;
+  A.log.push({t:Date.now(),st:'→ '+d.to,msg:d.content});
+  clearIdle(A);
+  if(STAGE_OF[d.from]===0)office.notes++;
+  if(B&&B!==A&&A.queue.length<4){
+    enqueue(A,[{t:'fn',f:()=>{A.carry=true}},{t:'goto',to:near(B)},
+      {t:'fn',f:()=>{A.carry=false;faceTo(A,B);bubble(A,d.content,4200,'talk');setTimeout(()=>bubble(B,REPLY[d.type]||'ok',2400,'talk'),1300)}},
+      {t:'wait',d:2800},{t:'goto',to:A.seat}]);
+  }else bubble(A,(B?'@'+B.id+' ':'')+d.content,4200,'talk');
+}
+function onAgentEvent(m){
+  const name=m.agent,st=m.status,msg=m.msg||'';
+  if(st==='dialogue'){if(m.dialogue)onDialogue(m.dialogue);return}
+  if(name==='System'){
+    feed('System',msg);
+    if(st==='running')startRun();
+    else if(st==='done'){startRun();endRun(m)}
+    else if(st==='error'){office.running=false;setStatus('ERROR');$('runBtn').disabled=false}
+    return;
   }
-
-  edgeLayer.innerHTML='';
-  dotLayer.innerHTML='';
-  nodeLayer.innerHTML='';
-
-  // edges
-  EDGES.forEach(([a,b])=>{
-    const [ax,ay]=getPos(a), [bx,by]=getPos(b);
-    const path=buildEdgePath(ax,ay,bx,by);
-    const active=nstate[a]==='running'||nstate[b]==='running';
-    const bothDone=nstate[a]==='done'&&nstate[b]==='done';
-    const acol=AG.find(n=>n.id===a).col;
-
-    // edge line
-    const p=s('path');
-    p.setAttribute('d',path);p.setAttribute('fill','none');
-    p.setAttribute('stroke', active?acol : bothDone?acol+'55' : '#2a2a2a');
-    p.setAttribute('stroke-width', active?2:1);
-    p.setAttribute('stroke-dasharray', active?'none':'4 8');
-    p.setAttribute('stroke-opacity', active?1:0.7);
-    edgeLayer.appendChild(p);
-
-    // animated dots on active edges (exactly like Octogent's animateMotion)
-    if(active || bothDone){
-      [0,1,2].forEach(i=>{
-        // trail dot
-        const trail=s('circle');
-        trail.setAttribute('r', active?4.6:3);
-        trail.setAttribute('fill', acol);
-        trail.setAttribute('opacity', Math.max(0.1, 0.25-i*0.04));
-        const mt=s('animateMotion');
-        mt.setAttribute('path',path);
-        mt.setAttribute('begin',`${i*0.62}s`);
-        mt.setAttribute('dur', active?'1.9s':'3s');
-        mt.setAttribute('repeatCount','indefinite');
-        mt.setAttribute('rotate','auto');
-        const ar=s('animate');
-        ar.setAttribute('attributeName','r');
-        ar.setAttribute('values',active?'3.8;5.2;3.8':'2;3;2');
-        ar.setAttribute('dur',active?'1.9s':'3s');
-        ar.setAttribute('begin',`${i*0.62}s`);
-        ar.setAttribute('repeatCount','indefinite');
-        trail.appendChild(mt); trail.appendChild(ar);
-        dotLayer.appendChild(trail);
-
-        // main dot
-        const dot=s('circle');
-        dot.setAttribute('r', active?3.2:2);
-        dot.setAttribute('fill','#fff4cc');
-        dot.setAttribute('stroke',acol);
-        dot.setAttribute('stroke-width','1.2');
-        dot.setAttribute('opacity', Math.max(0.6, 1-i*0.08));
-        const mt2=s('animateMotion');
-        mt2.setAttribute('path',path);
-        mt2.setAttribute('begin',`${i*0.62}s`);
-        mt2.setAttribute('dur',active?'1.9s':'3s');
-        mt2.setAttribute('repeatCount','indefinite');
-        mt2.setAttribute('rotate','auto');
-        const ar2=s('animate');
-        ar2.setAttribute('attributeName','r');
-        ar2.setAttribute('values',active?'2.8;3.8;2.8':'1.8;2.5;1.8');
-        ar2.setAttribute('dur',active?'1.9s':'3s');
-        ar2.setAttribute('begin',`${i*0.62}s`);
-        ar2.setAttribute('repeatCount','indefinite');
-        dot.appendChild(mt2); dot.appendChild(ar2);
-        dotLayer.appendChild(dot);
-      });
-    }
-  });
-
-  // nodes
-  AG.forEach(ag=>{
-    const [x,y]=getPos(ag.id);
-    const st=nstate[ag.id];
-    const col=ag.col;
-    const g=s('g');
-    g.setAttribute('transform',`translate(${x},${y})`);
-    g.style.cursor='grab';
-
-    // glow ring when active
-    if(st==='running'){
-      const glow=s('circle');
-      glow.setAttribute('r','42');
-      glow.setAttribute('fill',col+'12');
-      glow.setAttribute('stroke',col+'33');
-      glow.setAttribute('stroke-width','1');
-      g.appendChild(glow);
-
-      // pulsing outer ring animation
-      const ring=s('circle');
-      ring.setAttribute('r','34');
-      ring.setAttribute('fill','none');
-      ring.setAttribute('stroke',col);
-      ring.setAttribute('stroke-width','1.5');
-      ring.setAttribute('stroke-dasharray','4 4');
-      ring.setAttribute('opacity','0.7');
-      const ra=s('animateTransform');
-      ra.setAttribute('attributeName','transform');ra.setAttribute('type','rotate');
-      ra.setAttribute('from','0');ra.setAttribute('to','360');
-      ra.setAttribute('dur','2s');ra.setAttribute('repeatCount','indefinite');
-      ring.appendChild(ra);
-      g.appendChild(ring);
-
-      // second ring counter-rotating
-      const ring2=s('circle');
-      ring2.setAttribute('r','26');
-      ring2.setAttribute('fill','none');
-      ring2.setAttribute('stroke',col);
-      ring2.setAttribute('stroke-width','1');
-      ring2.setAttribute('stroke-dasharray','2 6');
-      ring2.setAttribute('opacity','0.4');
-      const ra2=s('animateTransform');
-      ra2.setAttribute('attributeName','transform');ra2.setAttribute('type','rotate');
-      ra2.setAttribute('from','360');ra2.setAttribute('to','0');
-      ra2.setAttribute('dur','3s');ra2.setAttribute('repeatCount','indefinite');
-      ring2.appendChild(ra2);
-      g.appendChild(ring2);
-    }
-
-    if(st==='done'){
-      const glow=s('circle');
-      glow.setAttribute('r','32');
-      glow.setAttribute('fill',col+'0a');
-      glow.setAttribute('stroke',col+'33');
-      glow.setAttribute('stroke-width','1');
-      g.appendChild(glow);
-    }
-
-    if(st==='rejected'){
-      const glow=s('circle');
-      glow.setAttribute('r','36');
-      glow.setAttribute('fill','#ff444415');
-      glow.setAttribute('stroke','#ff4444');
-      glow.setAttribute('stroke-width','1.5');
-      const pa=s('animate');
-      pa.setAttribute('attributeName','opacity');
-      pa.setAttribute('values','1;0.3;1');
-      pa.setAttribute('dur','0.8s');pa.setAttribute('repeatCount','indefinite');
-      glow.appendChild(pa);
-      g.appendChild(glow);
-    }
-
-    // node body
-    const R=24;
-    const body=s('circle');
-    body.setAttribute('r',R);
-    body.setAttribute('fill', st==='running'?col+'22': st==='rejected'?'#ff444422': st==='done'?col+'11':'#111');
-    body.setAttribute('stroke', st==='running'?col: st==='rejected'?'#ff4444': st==='done'?col+'88': '#2a2a2a');
-    body.setAttribute('stroke-width', st==='running'||st==='rejected'?2:1);
-    g.appendChild(body);
-
-    // pulse animation on node body when running
-    if(st==='running'){
-      const pa=s('animate');
-      pa.setAttribute('attributeName','r');
-      pa.setAttribute('values',`${R};${R+2};${R}`);
-      pa.setAttribute('dur','1s');pa.setAttribute('repeatCount','indefinite');
-      body.appendChild(pa);
-    }
-
-    // pixel octopus character via foreignObject
-    const fo=s('foreignObject');
-    fo.setAttribute('x','-24');fo.setAttribute('y','-24');
-    fo.setAttribute('width','48');fo.setAttribute('height','54');
-    fo.style.pointerEvents='none';fo.style.overflow='visible';
-    const div=document.createElementNS('http://www.w3.org/1999/xhtml','div');
-    div.style.cssText='width:48px;height:54px;display:flex;align-items:center;justify-content:center;overflow:hidden';
-    const cvs=document.createElementNS('http://www.w3.org/1999/xhtml','canvas');
-    cvs.width=48;cvs.height=54;
-    drawOctopus(cvs,col,st,ag.id);
-    div.appendChild(cvs);fo.appendChild(div);g.appendChild(fo);
-
-    // label
-    const lbl=s('text');
-    lbl.setAttribute('text-anchor','middle');
-    lbl.setAttribute('y','38');
-    lbl.setAttribute('font-size','9');
-    lbl.setAttribute('font-family','Share Tech Mono,monospace');
-    lbl.setAttribute('fill', st==='running'?col: st==='rejected'?'#ff4444': st==='done'?col+'99':'#444');
-    lbl.setAttribute('letter-spacing','1');
-    lbl.textContent=ag.lbl.toUpperCase();
-    g.appendChild(lbl);
-
-    // [ ACTIVE ] blinking label
-    if(st==='running'){
-      const act=s('text');
-      act.setAttribute('text-anchor','middle');
-      act.setAttribute('y','50');
-      act.setAttribute('font-size','7');
-      act.setAttribute('font-family','Share Tech Mono,monospace');
-      act.setAttribute('fill',col);
-      act.textContent='[ ACTIVE ]';
-      const ab=s('animate');
-      ab.setAttribute('attributeName','opacity');
-      ab.setAttribute('values','1;0;1');ab.setAttribute('dur','0.8s');
-      ab.setAttribute('repeatCount','indefinite');
-      act.appendChild(ab);
-      g.appendChild(act);
-    }
-
-    nodeLayer.appendChild(g);
-  });
-}
-
-// ── Octogent-style animated octopus ─────────────────────────────────────────
-const B='B',O='O',E='E',_='';const PX=3;
-const HT=[[_,_,_,_,O,O,O,O,O,O,O,O,_,_,_,_],[_,_,_,O,B,B,B,B,B,B,B,B,O,_,_,_],[_,_,O,B,B,B,B,B,B,B,B,B,B,O,_,_]];
-const HB=[[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_]];
-const HB2=[[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],[_,O,B,B,B,O,O,O,O,O,O,O,B,B,O,_],[_,O,B,B,B,O,O,O,O,O,O,O,B,B,O,_],[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_]];
-const HTA=[[_,_,_,_,O,O,O,O,O,O,O,O,_,_,_,_],[_,_,_,O,B,B,B,B,B,B,B,B,O,_,_,_],[_,_,O,B,O,B,B,B,B,B,B,O,B,O,_,_]];
-const HBA=[[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],[_,O,B,B,B,B,O,O,O,O,O,B,B,B,O,_],[_,O,B,B,B,B,O,O,O,O,O,B,B,B,O,_],[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_]];
-const FN=[[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],[_,O,B,B,E,E,B,B,B,B,E,E,B,B,O,_],[_,O,B,B,E,E,B,B,B,B,E,E,B,B,O,_]];
-const FH=[[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],[_,O,B,B,E,E,B,B,B,B,E,E,B,B,O,_]];
-const FA=[[_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_],[_,O,B,O,E,E,B,B,B,B,E,E,O,B,O,_],[_,O,B,B,E,E,B,B,B,B,E,E,B,B,O,_]];
-const HN=[...HT,...FN,...HB],HH=[...HT,...FH,...HB2],HA=[...HTA,...FA,...HBA];
-const TT=[[_,O,B,O,B,B,O,B,B,O,B,B,O,B,O,_]];
-const TN=[[_,O,B,B,O,_,O,B,B,O,_,O,B,B,O,_],[_,_,O,O,_,_,_,O,O,_,_,_,O,O,_,_],[_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_]];
-const TS=[[_,O,B,O,_,_,O,B,O,_,_,O,B,O,_,_],[_,O,O,_,_,_,_,O,O,_,_,_,O,O,_,_],[_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_]];
-const TW=[[_,_,O,B,O,_,_,O,B,O,_,_,O,B,O,_],[_,_,_,O,O,_,_,_,O,O,_,_,_,O,O,_],[_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_]];
-const WA=[[_,O,B,B,O,_,O,B,B,O,_,O,B,B,O,_],[_,_,O,B,O,_,O,B,O,_,_,_,O,B,O,_],[_,_,_,O,O,_,O,O,_,_,_,_,_,O,O,_],[_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_]];
-const WB=[[_,O,B,B,O,_,O,B,B,O,_,O,B,B,O,_],[_,O,B,O,_,_,_,O,B,O,_,O,B,O,_,_],[_,O,O,_,_,_,_,_,O,O,_,O,O,_,_,_],[_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_]];
-const BC=[[_,O,B,B,O,_,O,B,B,O,_,O,B,B,O,_],[_,O,B,O,_,_,O,B,B,O,_,_,O,B,O,_],[_,O,O,_,_,_,_,O,O,_,_,_,_,O,O,_],[_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_]];
-const BT=[[_,O,B,B,O,_,O,B,B,O,_,O,B,B,O,_],[_,_,O,O,_,_,_,O,O,_,_,_,O,O,_,_],[_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],[_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_]];
-const STD=[...TT,...TN];
-const ANIM={
-  idle:[{h:HN,t:[...TT,...TN],y:0},{h:HN,t:[...TT,...TS],y:0},{h:HN,t:[...TT,...TN],y:0},{h:HN,t:[...TT,...TW],y:0}],
-  running:[{h:HH,t:WA,y:1},{h:HH,t:STD,y:0},{h:HH,t:WA,y:1},{h:HH,t:WB,y:0}],
-  done:[{h:HH,t:BC,y:2},{h:HH,t:STD,y:1},{h:HH,t:BT,y:0},{h:HH,t:STD,y:1}],
-  rejected:[{h:HA,t:STD,y:0},{h:HA,t:STD,y:0},{h:HA,t:STD,y:1},{h:HA,t:STD,y:2},{h:HA,t:STD,y:2},{h:HA,t:STD,y:1}],
-};
-const ANIM_MS={idle:420,running:180,done:260,rejected:480};
-const agSt={};
-AG.forEach(ag=>{agSt[ag.id]={frame:0,interval:null,canvas:null,state:'idle',col:ag.col};});
-function _drawFrame(id){
-  const a=agSt[id];if(!a.canvas)return;
-  const ctx=a.canvas.getContext('2d');
-  const frames=ANIM[a.state]||ANIM.idle;
-  const f=frames[a.frame%frames.length];
-  ctx.clearRect(0,0,a.canvas.width,a.canvas.height);
-  [...f.h,...f.t].forEach((row,ry)=>{row.forEach((cell,cx)=>{
-    if(!cell)return;
-    ctx.fillStyle=(cell===E||cell===O)?'#000':a.col;
-    ctx.fillRect(cx*PX,(ry+(f.y||0))*PX,PX,PX);
-  });});
-}
-function _startAnim(id,state){
-  const a=agSt[id];
-  if(!a) return; // 'System' and other non-graph sources have no sprite
-  if(a.interval){clearInterval(a.interval);a.interval=null;}
-  a.state=state;a.frame=0;_drawFrame(id);
-  a.interval=setInterval(()=>{a.frame=(a.frame+1)%((ANIM[a.state]||ANIM.idle).length);_drawFrame(id);},ANIM_MS[state]||420);
-}
-function drawOctopus(canvas,col,state,agId){
-  const a=agSt[agId];
-  const isNew=!a.canvas||a.canvas!==canvas;
-  a.canvas=canvas;a.col=col;
-  if(isNew||a.state!==state)_startAnim(agId,state);
-}
-
-// ── drag to pan viewBox ────────────────────────────────────────────────────────
-const svg=document.getElementById('gsvg');
-let pan={x:0,y:0,dragging:false,sx:0,sy:0};
-let vb={x:-400,y:-300,w:800,h:600};
-
-svg.addEventListener('mousedown',e=>{
-  if(e.target===svg){pan.dragging=true;pan.sx=e.clientX;pan.sy=e.clientY}
-});
-svg.addEventListener('mousemove',e=>{
-  if(!pan.dragging) return;
-  const sc=svg.clientWidth/vb.w;
-  vb.x-=(e.clientX-pan.sx)/sc; vb.y-=(e.clientY-pan.sy)/sc;
-  pan.sx=e.clientX;pan.sy=e.clientY;
-  svg.setAttribute('viewBox',`${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
-});
-svg.addEventListener('mouseup',()=>pan.dragging=false);
-svg.addEventListener('wheel',e=>{
-  e.preventDefault();
-  const sc=e.deltaY>0?1.15:0.87;
-  vb.w*=sc;vb.h*=sc;
-  svg.setAttribute('viewBox',`${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
-},{passive:false});
-
-// ── WebSocket ──────────────────────────────────────────────────────────────────
-let ws=null, wsRetry=null;
-function connectWS(){
-  const wsProto=window.location.protocol==='https:'?'wss:':'ws:';
-  const wsHostPort=window.location.host||'127.0.0.1:8000';
-  ws=new WebSocket(wsProto+'//'+wsHostPort+'/ws'+tokenQS());
-  ws.onopen=()=>{
-    document.getElementById('wsd').className='ws-dot on';
-    document.getElementById('wst').textContent='connected';
-    clearInterval(wsRetry);wsRetry=null;
-  };
-  ws.onclose=()=>{
-    document.getElementById('wsd').className='ws-dot';
-    document.getElementById('wst').textContent='offline — demo mode';
-    if(!wsRetry) wsRetry=setInterval(connectWS,4000);
-  };
-  ws.onmessage=e=>{
-    try{handleMsg(JSON.parse(e.data))}catch(err){console.error('handleMsg failed:',err)}
-  };
-}
-let currentSessionId = null;
-function wsSend(d){
-  if(ws&&ws.readyState===1){ws.send(JSON.stringify(d));return true}
-  return false;
+  const a=AGM[name];if(!a)return;
+  if(!office.running)startRun();
+  feed(name,msg);
+  a.log.push({t:Date.now(),st,msg});if(a.log.length>40)a.log.shift();
+  if(STAGE_OF[name]!=null&&st==='running'){office.stage=STAGE_OF[name];$('pStage').textContent=STAGES[office.stage]}
+  clearIdle(a);a.act=msg||st;
+  const fm=msg.match(/(\d+) files?/);if(fm){office.files=+fm[1];$('pFiles').textContent=fm[1]}
+  const qm=msg.match(/score (\d+)\/100/);if(qm){office.quality=+qm[1];$('pQ').textContent=qm[1]+'/100'}
+  if(st==='running'){a.status='working';if(dist(a,a.seat)>.05&&!a.queue.length)enqueue(a,[{t:'goto',to:a.seat}]);bubble(a,msg,4000,'work');
+    if(name==='Planner'||name==='Architect')office.notes++}
+  else if(st==='done'){a.status='done';a.doneAt=performance.now();bubble(a,'✓ '+msg,4000,'ok')}
+  else if(st==='error'||st==='rejected'){a.status='error';bubble(a,msg,5000,'err')}
+  if(name==='Executor')onSandbox(a,st,msg);
+  if(a===selected)renderInfo();
 }
 function handleMsg(m){
-  if(m.type==='error'){
-    addLog('System','error',m.msg||'error');
-    setStatus('ERROR');stopClock();isRunning=false;
-    document.getElementById('runBtn').disabled=false;
-    return;
-  }
-  if(m.type==='session_created'){
-    currentSessionId = m.session_id; // keep FULL id for reliable API calls
-    document.getElementById('sbSess').textContent=m.session_id.slice(0,8);
-  }
-  if(m.type==='agent_event'){
-    const {agent,status,msg,elapsed}=m;
-    addLog(agent,status,msg,elapsed);
-    if(status==='running') setN(agent,'running');
-    else if(status==='done') setN(agent,'done');
-    else if(status==='rejected'){
-      setN(agent,'rejected');
-    }
-    else if(status==='error'){
-      if(agent==='Reviewer'&&msg.includes('secret')){
-        cveCnt++;document.getElementById('hsC').textContent=cveCnt;
-        showSec();
-      }
-    }
-    else if(status==='dialogue'&&m.dialogue){
-      addDialogue(m.dialogue);
-    }
-
-    // live quality score from Reviewer events
-    if(agent==='Reviewer'&&msg){
-      const qm=msg.match(/score (\d+)\/100/);
-      if(qm){
-        document.getElementById('hsQ').textContent=qm[1]+'/100';
-        document.getElementById('hsQ').style.color=parseInt(qm[1])>=85?'var(--green)':parseInt(qm[1])>=70?'var(--yellow)':'var(--red)';
-      }
-    }
-
-    // live file count
-    const fm=msg&&msg.match(/(\d+) files?/);
-    if(fm){fileCnt=parseInt(fm[1]);updStats()}
-
-    // final quality score from System done event
-    if(status==='done'&&agent==='System'){
-      if(m.quality_score){
-        const qs=m.quality_score;
-        document.getElementById('hsQ').textContent=qs+'/100';
-        document.getElementById('hsQ').style.color=qs>=85?'var(--green)':qs>=70?'var(--yellow)':'var(--red)';
-      } else {
-        document.getElementById('hsQ').textContent='—';
-      }
-      if(m.usage) showUsage(m.usage, m.sandbox);
-      setStatus('DONE');stopClock();isRunning=false;
-      document.getElementById('runBtn').disabled=false;
-      // reveal download button now that files exist
-      if(currentSessionId){
-        const dlBtn=document.getElementById('dlBtn');
-        dlBtn.style.display='inline-flex';
-        dlBtn.onclick=()=>window.open(`/api/sessions/${encodeURIComponent(currentSessionId)}/download`+tokenQS(),'_blank');
-      }
-    }
-
-    // complete event (project ready)
-    if(status==='complete'&&agent==='System'){
-      document.getElementById('hsQ').textContent='✓';
-    }
-
-    if(m.benchmark) showBench(m.benchmark);
-  }
+  if(m.type==='error'){feed('System',m.msg||'error');setStatus('ERROR');office.running=false;$('runBtn').disabled=false;return}
+  if(m.type==='session_created'){office.session=m.session_id;office.demo=false;startRun();return}
+  if(m.type==='agent_event'){if(m.benchmark)feed('System',`benchmark: single ${m.benchmark.single.score} vs society ${m.benchmark.society.score}`);onAgentEvent(m)}
 }
 
-// ── live agent dialogue feed (reuses the dynPanel slot) ─────────────────────────
-let dialogueEntries=[];
-function addDialogue(d){
-  dialogueEntries.push(d);
-  document.getElementById('dynT').textContent='AGENT DIALOGUE';
-  const rows = dialogueEntries.slice(-12).map(e=>{
-    const cls = e.type==='request'?'sc-bad':e.type==='patch'?'sc-good':'';
-    const arrow = `${esc(e.from)} → ${esc(e.to)}`;
-    return `<div class="dlg-row ${cls}">
-      <div class="dlg-meta"><span class="dlg-arrow">${arrow}</span><span class="dlg-type">${esc(e.type)}</span></div>
-      <div class="dlg-content">${esc((e.content||'').slice(0,180))}</div>
-    </div>`;
-  }).join('');
-  document.getElementById('dynB').innerHTML = `<div class="dlg-feed">${rows}</div>`;
-  const dynB = document.getElementById('dynB');
-  dynB.scrollTop = dynB.scrollHeight;
+// ── connection ────────────────────────────────────────────────────────────────
+let ws=null,wsOpen=false;
+function connect(){
+  if(!/^https?:/.test(location.protocol))return;
+  try{ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws'+tokenQS())}catch(e){return}
+  ws.onopen=()=>{wsOpen=true;$('connDot').className='dot on'};
+  ws.onclose=()=>{wsOpen=false;$('connDot').className='dot err';setTimeout(connect,3000)};
+  ws.onerror=()=>{};
+  ws.onmessage=e=>{try{handleMsg(JSON.parse(e.data))}catch(err){console.error('handleMsg failed:',err)}};
 }
-
-// ── node state ─────────────────────────────────────────────────────────────────
-let _nLock={};
-function setN(id,s){
-  if(!agSt[id]) return;
-  if(nstate[id]==='rejected'&&s==='running'&&!_nLock[id]){
-    _nLock[id]=true;
-    setTimeout(()=>{nstate[id]=s;_nLock[id]=false;_startAnim(id,'running');},2000);
-    return;
-  }
-  nstate[id]=s;
-  if(s==='done'){doneCnt++;updStats()}
-  _startAnim(id,s==='done'?'done':s==='running'?'running':s==='rejected'?'rejected':'idle');
-}
-
-function updStats(){
-  document.getElementById('hsA').textContent=`${doneCnt}/9`;
-  document.getElementById('sbA').textContent=`${doneCnt}/9`;
-  document.getElementById('hsF').textContent=fileCnt;
-  document.getElementById('sbF').textContent=fileCnt;
-}
-
-// ── log ────────────────────────────────────────────────────────────────────────
-function addLog(agent,status,msg,elapsed){
-  const p=document.getElementById('lp');
-  if(logs.length===0) p.innerHTML='';
-  const ts=elapsed!=null?elapsed:(t0?((Date.now()-t0)/1000).toFixed(1):'0.0');
-  logs.push({agent,status,msg,ts});
-  const ac=`a${cls(agent)}`;
-  const sc={'done':'cdone','running':'crun','error':'cerr'}[status]||'';
-  const d=document.createElement('div');d.className='lr';
-  d.innerHTML=`<span class="lts">${ts}s</span><span class="lag ${ac}">${esc((agent||'SYS').slice(0,8).toUpperCase())}</span><span class="lmsg ${sc}">${esc(msg)}</span>`;
-  p.appendChild(d);p.scrollTop=p.scrollHeight;
-  document.getElementById('lc').textContent=`${logs.length} events`;
-}
-
-function setStatus(t){document.getElementById('sbS').textContent=t}
-
-function startClock(){
-  t0=Date.now();
-  ticker=setInterval(()=>{
-    const sc=Math.floor((Date.now()-t0)/1000);
-    document.getElementById('clk').textContent=`${Math.floor(sc/60).toString().padStart(2,'0')}:${(sc%60).toString().padStart(2,'0')}`;
-  },500);
-}
-function stopClock(){clearInterval(ticker)}
-const sl=ms=>new Promise(r=>setTimeout(r,ms));
-
-// ── run actions ────────────────────────────────────────────────────────────────
 function runOpts(){
-  const key=(document.getElementById('kkey').value||'').trim();
-  if(document.getElementById('kreplay').checked) return {mode:'replay'};
-  if(key) return {api_key:key, provider:document.getElementById('kprov').value};
-  return {};
+  if($('kreplay').checked)return{mode:'replay'};
+  const key=($('kkey').value||'').trim();
+  return key?{api_key:key,provider:$('kprov').value}:{};
 }
-function showUsage(u, sbx){
-  if(!u||!u.by_agent) return;
-  const fmt=n=>(n||0).toLocaleString();
-  const rows=Object.entries(u.by_agent).sort((a,b)=>(b[1].total_tokens||0)-(a[1].total_tokens||0)).map(([a,d])=>
-    `<tr><td>${esc(a)}</td><td>${esc(d.calls)}</td><td>${fmt(d.total_tokens)}</td><td>${esc(d.seconds)}s</td><td>${d.cost_usd==null?'—':'$'+Number(d.cost_usd).toFixed(4)}</td></tr>`).join('');
-  const cost=u.cost_usd==null?'unknown (set APEX_PRICES)':'$'+Number(u.cost_usd).toFixed(4);
-  const sb=sbx?`<div class="sc ${sbx.passed?'sc-good':'sc-bad'}"><div class="sc-t">Sandbox ${sbx.passed?'PASSED':'FAILED'} after ${esc(sbx.attempts)} attempt(s)</div><div class="sc-d">first attempt ${sbx.first_attempt_passed?'passed':'failed — healed from real error output'}</div></div>`:'';
-  document.getElementById('dynT').textContent='COST & TOKENS';
-  document.getElementById('dynB').innerHTML=`${sb}<div style="margin:4px 0 6px;font-size:10px;color:var(--sub)">${fmt(u.total_tokens)} tokens · ${esc(u.calls)} LLM calls · ${esc(u.wall_seconds)}s · ${esc(cost)}${u.estimated_tokens?' · tokens partly estimated':''}</div>
-    <table class="ut"><tr><th>agent</th><th>calls</th><th>tokens</th><th>time</th><th>cost</th></tr>${rows}</table>`;
-}
-fetch('/api/health').then(r=>r.json()).then(h=>{
-  if(h.public_demo){
-    document.getElementById('knote').textContent='public demo: bring your own key, or tick demo replay';
-    document.getElementById('kreplay').checked=true;
-  }
-}).catch(()=>{});
+$('runBtn').onclick=()=>{
+  const task=($('task').value||'').trim()||'todo API with auth and tests';
+  if(wsOpen){office.demo=false;ws.send(JSON.stringify(Object.assign({action:'run',task},runOpts())))}
+  else offlineDemo(task);
+};
+$('task').addEventListener('keydown',e=>{if(e.key==='Enter')$('runBtn').click()});
+fetch('/api/health').then(r=>r.json()).then(h=>{if(h.public_demo)$('kreplay').checked=true}).catch(()=>{});
 
-async function doRun(){
-  if(isRunning) return;
-  const task=document.getElementById('tin').value.trim();
-  if(!task) return;
-  doReset(false);
-  isRunning=true;document.getElementById('runBtn').disabled=true;
-  setStatus('RUNNING');startClock();
-
-  if(!wsSend(Object.assign({action:'run',task},runOpts()))){
-    // demo mode
-    const pipe=[
-      {a:'Planner',   d:2600,f:0,m:'analyzing requirements'},
-      {a:'Architect', d:3200,f:0,m:'designing architecture'},
-      {a:'Coder',     d:8000,f:9,m:'generating production code'},
-      {a:'Reviewer',  d:3800,f:0,m:'reviewing security & quality'},
-      {a:'SelfHealer',d:2000,f:2,m:'self-healing pass'},
-      {a:'Debugger',  d:1400,f:0,m:'checking runtime errors'},
-      {a:'Executor',  d:1200,f:0,m:'validating syntax of generated files'},
-      {a:'DocWriter', d:2500,f:1,m:'writing docs'},
-    ];
-    for(const step of pipe){
-      setN(step.a,'running');addLog(step.a,'running',step.m);
-      await sl(step.d);
-      if(step.a==='Reviewer'){
-        // conflict resolution beat: reject → coder revises → reviewer approves
-        await sl(400);
-        addLog('Reviewer','rejected','round 1: score 68/100 — 2 blocking issue(s), sent back to Coder');
-        setN('Reviewer','rejected');
-        addDialogue({from:'Reviewer',to:'Coder',type:'request',
-          content:'REJECTED (round 1, score 68/100). Revision required: CRITICAL: hardcoded JWT secret fallback; missing input validation on /api/auth'});
-        await sl(700);
-        setN('Coder','running');addLog('Coder','running','revising per Reviewer feedback (round 1)');
-        await sl(1400);
-        addLog('Coder','done','revised 2 file(s)');
-        setN('Coder','done');
-        addDialogue({from:'Coder',to:'Reviewer',type:'patch',
-          content:'Revision complete for round 1. Patched 2 file(s): auth.py, config.py. Resubmitting for review.'});
-        await sl(600);
-        setN('Reviewer','running');addLog('Reviewer','running','reviewing code quality & security (round 2)');
-        await sl(900);
-        cveCnt++;document.getElementById('hsC').textContent=cveCnt;
-        addLog('Reviewer','error','critical — hardcoded jwt secret detected');
-        showSec();
-        addLog('Reviewer','done','approved — score 96/100 (round 2)');
-        addDialogue({from:'Reviewer',to:'SelfHealer',type:'feedback',
-          content:'Code APPROVED after 2 round(s). Score 96/100. No critical issues remain. SelfHealer to do proactive check.'});
-      }
-      if(step.a==='SelfHealer'){
-        addLog('SelfHealer','running','patching secret → env-only');
-        await sl(600);addLog('SelfHealer','done','cve resolved');
-      }
-      if(step.f>0){fileCnt+=step.f;updStats()}
-      addLog(step.a,'done',step.a==='Coder'?`${fileCnt} files`:step.a==='DocWriter'?'readme done':'done');
-      setN(step.a,'done');
-    }
-    addLog('System','done',`offline scripted animation — connect to the server for a real run`);
-    document.getElementById('hsQ').textContent='100';
-    setStatus('DONE');stopClock();isRunning=false;
-    document.getElementById('runBtn').disabled=false;
-  }
+// ── offline demo: used when no server is reachable ────────────────────────────
+function offlineDemo(task){
+  office.demo=true;office.session=null;
+  const E=(agent,status,msg,x)=>Object.assign({type:'agent_event',agent,status,msg},x||{});
+  const D=(from,to,type,content)=>E(from,'dialogue','',{dialogue:{from,to,type,content}});
+  const script=[
+    [0,E('System','running','starting agent society for: '+task.slice(0,50))],
+    [900,D('Memory','Planner','context','2 lessons from past runs: validate input, no default secrets')],
+    [2600,E('Planner','running','Planning project structure...')],[300,E('Architect','running','Designing architecture...')],
+    [3200,E('Planner','done','Plan ready: 9 files, flask + sqlite')],[600,D('Planner','Architect','handoff','plan ready, 9 files')],
+    [2600,E('Architect','done','Architecture ready')],[500,D('Architect','Coder','handoff','layered app, repo pattern')],
+    [2400,E('Coder','running','Generating code...')],[4200,E('Coder','done','Generated 9 files')],
+    [500,D('Coder','Reviewer','request','ready for review')],[2600,E('Reviewer','running','Reviewing code...')],
+    [3400,E('Reviewer','rejected','score 72/100 · hardcoded SECRET_KEY fallback')],[500,D('Reviewer','Coder','feedback','remove the default secret')],
+    [2600,E('Coder','running','Revising: removing default secret')],[3400,E('Coder','done','Revised 2 files')],
+    [500,D('Coder','Reviewer','request','fixed, please re-check')],[2400,E('Reviewer','running','Re-reviewing...')],
+    [2800,E('Reviewer','done','Approved, score 94/100')],[500,D('Reviewer','SelfHealer','handoff','2 minor warnings left')],
+    [2400,E('SelfHealer','running','Patching warnings...')],[2600,E('SelfHealer','done','Patched 2 files')],
+    [400,D('SelfHealer','Debugger','handoff','check imports and startup')],[2200,E('Debugger','running','Hunting runtime errors...')],
+    [2600,E('Debugger','done','No runtime errors found')],
+    [600,E('Executor','running','Sandbox run 1: install → compile → import → tests (network off)')],
+    [4200,E('Executor','error','Sandbox failed: deps=ok compile=ok import=ok tests=3/4')],
+    [500,D('Executor','SelfHealer','feedback','test_validation fails: expected 400')],
+    [2600,E('SelfHealer','running','Fixing sandbox failures from real error output...')],[2600,E('SelfHealer','done','Patched 1 file, re-running sandbox')],
+    [600,E('Executor','running','Sandbox run 2: install → compile → import → tests (network off)')],
+    [4000,E('Executor','done','✓ Sandbox passed: deps=ok compile=ok import=ok tests=4/4')],
+    [500,D('Executor','DocWriter','validation','sandbox passed on attempt 2')],
+    [2200,E('DocWriter','running','Writing documentation...')],[3000,E('DocWriter','done','README written')],
+    [600,E('System','done','complete · 10 files generated',{quality_score:94,files:10,
+      sandbox:{attempts:2,passed:true,first_attempt_passed:false},
+      usage:{calls:11,total_tokens:41820,cost_usd:null,wall_seconds:62,estimated_tokens:true,by_agent:{
+        Coder:{calls:2,total_tokens:16400,seconds:21},Reviewer:{calls:2,total_tokens:8200,seconds:9},SelfHealer:{calls:2,total_tokens:6100,seconds:8},
+        Planner:{calls:1,total_tokens:3300,seconds:4},Architect:{calls:1,total_tokens:2900,seconds:4},Debugger:{calls:1,total_tokens:2800,seconds:4},
+        DocWriter:{calls:1,total_tokens:2120,seconds:3},Executor:{calls:0,total_tokens:0,seconds:8.4}}}})],
+  ];
+  let tsum=0;script.forEach(([d,m])=>{tsum+=d;setTimeout(()=>handleMsg(m),tsum)});
 }
 
-function doBench(){
-  const task=document.getElementById('tin').value.trim();
-  if(!wsSend(Object.assign({action:'benchmark',task},runOpts()))){
-    showBench({single:{time:69.3,files:5,score:91,vulns:1},society:{time:182.9,files:11,score:100,vulns:0}});
-  }
-}
-
-function showBench(d){
-  document.getElementById('dynT').textContent='BENCHMARK';
-  const s=d.single,m=d.society;
-  const baseHTML=`
-    <table class="bt">
-      <tr><th>METRIC</th><th>SINGLE</th><th>SOCIETY</th></tr>
-      <tr><td>TIME</td><td class="neu">${s.time}s</td><td class="neu">${m.time}s</td></tr>
-      <tr><td>FILES</td><td class="bad">${s.files}</td><td class="good">${m.files} (+${m.files-s.files})</td></tr>
-      <tr><td>QUALITY</td><td class="bad">${s.score}/100</td><td class="good">${m.score}/100</td></tr>
-      <tr><td>CVEs</td><td class="bad">${s.vulns} ⚠</td><td class="good">${m.vulns} ✓</td></tr>
-      <tr><td>AGENTS</td><td class="neu">1</td><td class="good">9</td></tr>
-    </table>
-    <div style="margin-top:8px;padding:7px;border:1px solid #1e1e1e;font-size:9px;color:#444;line-height:1.8">
-      > SOCIETY CATCHES CVE-LEVEL SECRETS<br>
-      > REVIEWER FLAGGED JWT HARDCODE @ T=185S<br>
-      > HEALER PATCHED AUTOMATICALLY<br>
-      > 0 VULNERABILITIES IN PRODUCTION
-    </div>
-    <div id="cumulativeStats" style="margin-top:8px;color:var(--dim);font-size:9px">loading cumulative stats...</div>`;
-  document.getElementById('dynB').innerHTML=baseHTML;
-  // fetch live cumulative impact stats
-  apiFetch('/api/society/stats').then(r=>r.json()).then(stats=>{
-    const soc=stats.society||{}, imp=stats.improvement||{};
-    document.getElementById('cumulativeStats').innerHTML=`
-      <div style="color:var(--sub);letter-spacing:1px;margin-bottom:4px">CUMULATIVE IMPACT — ALL RUNS</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
-        <div class="sc sc-good"><div class="sc-t">${esc(soc.total_runs||0)}</div><div class="sc-d">Runs</div></div>
-        <div class="sc sc-good"><div class="sc-t">${esc(soc.total_files_generated||0)}</div><div class="sc-d">Files</div></div>
-        <div class="sc sc-good"><div class="sc-t">${esc(soc.avg_quality_score||0)}/100</div><div class="sc-d">Avg Quality</div></div>
-      </div>
-      <div style="color:var(--dim);font-size:8px;margin-top:4px">${esc(imp.note||'')}</div>`;
-  }).catch(()=>{
-    document.getElementById('cumulativeStats').innerHTML='';
-  });
-}
-
-function showMemory(){
-  document.getElementById('dynT').textContent='MEMORY & LEARNING';
-  apiFetch('/api/memory/stats').then(r=>r.json()).then(d=>{
-    const projects = d.projects||[];
-    const stats = d.stats||{};
-    const rows = projects.slice(0,8).map(p=>`
-      <div class="sc sc-good" style="margin-bottom:6px">
-        <div class="sc-t">${esc(p.name)} <span style="color:var(--dim);font-size:8px">${esc(new Date(p.created*1000).toLocaleDateString())}</span></div>
-        <div class="sc-d">${esc(p.request)}</div>
-        ${p.quality_score?`<div class="sc-d" style="color:var(--green)">Quality: ${esc(p.quality_score)}/100 · ${esc(p.file_count)} files</div>`:''}
-        ${p.lessons_learned&&p.lessons_learned.length?`<div class="sc-d" style="color:#ffcc44;font-size:8px">💡 ${esc(p.lessons_learned[0])}</div>`:''}
-      </div>`).join('');
-    document.getElementById('dynB').innerHTML=`
-      <div style="padding:8px">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
-          <div class="sc sc-good"><div class="sc-t">${esc(stats.total_runs||0)}</div><div class="sc-d">Total Runs</div></div>
-          <div class="sc sc-good"><div class="sc-t">${esc(stats.avg_quality||0)}/100</div><div class="sc-d">Avg Quality</div></div>
-          <div class="sc sc-good"><div class="sc-t">${esc(stats.total_files||0)}</div><div class="sc-d">Files Generated</div></div>
-        </div>
-        <div style="color:var(--sub);font-size:9px;margin-bottom:8px">PAST PROJECTS — agents learn from these</div>
-        ${rows||'<div class="empty">No past runs yet. Run a task to start building memory.</div>'}
-      </div>`;
-  }).catch(()=>{
-    document.getElementById('dynB').innerHTML='<div class="empty">Memory API unavailable</div>';
-  });
-}
-
-function showSec(){
-  setTab('security',document.querySelectorAll('.nav-btn')[2]);
-  document.getElementById('dynT').textContent='SECURITY';
-  document.getElementById('dynB').innerHTML=`
-    <div class="sc sc-bad">
-      <div class="sc-t">⚠ CRITICAL — SINGLE AGENT</div>
-      <div style="color:#666">hardcoded jwt secret fallback</div>
-      <div class="sc-code">SECRET_KEY = os.getenv(<br>
-&nbsp;"SECRET_KEY",<br>
-&nbsp;<span style="color:var(--red)">"09d25e094faa..."</span>)<br>
-<span style="color:#333">← CVE IF ENV NOT SET</span></div>
-    </div>
-    <div class="sc sc-good">
-      <div class="sc-t">✓ SECURE — AGENT SOCIETY</div>
-      <div style="color:#666">reviewer caught · healer patched</div>
-      <div class="sc-code">SECRET_KEY = os.getenv(<br>
-&nbsp;"SECRET_KEY")<br>
-<span style="color:#333">if not SECRET_KEY:<br>&nbsp;&nbsp;raise ValueError(...)</span></div>
-      <div style="color:var(--green);margin-top:7px;font-size:9px;line-height:1.7">
-▶ FLAGGED BY REVIEWER @ T=185S<br>▶ PATCHED BY HEALER @ T=192S</div>
-    </div>`;
-}
-
-// ── tabs ───────────────────────────────────────────────────────────────────────
-function setTab(tab, el){
-  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('on'));
-  if(el) el.classList.add('on');
-  if(tab==='bench') showBench({single:{time:69.3,files:5,score:91,vulns:1},society:{time:182.9,files:11,score:100,vulns:0}});
-  else if(tab==='security') showSec();
-  else if(tab==='memory') showMemory();
-}
-
-document.addEventListener('keydown',e=>{
-  const m={'1':['agents',0],'2':['bench',1],'3':['security',2]};
-  if(m[e.key]){
-    const [tab,idx]=m[e.key];
-    setTab(tab,document.querySelectorAll('.nav-btn')[idx]);
-  }
-});
-
-// ── reset ──────────────────────────────────────────────────────────────────────
-function doReset(resetN=true){
-  logs=[];fileCnt=0;cveCnt=0;doneCnt=0;currentSessionId=null;
-  stopClock();isRunning=false;
-  document.getElementById('clk').textContent='00:00';
-  document.getElementById('lp').innerHTML='<div class="empty">waiting...</div>';
-  document.getElementById('lc').textContent='0 events';
-  document.getElementById('hsA').textContent='0/9';
-  document.getElementById('hsF').textContent='0';
-  document.getElementById('hsQ').textContent='—';
-  document.getElementById('hsC').textContent='0';
-  document.getElementById('sbA').textContent='0/9';
-  document.getElementById('sbF').textContent='0';
-  document.getElementById('sbSess').textContent='—';
-  document.getElementById('dlBtn').style.display='none';
-  document.getElementById('dynB').innerHTML='<div class="empty">click benchmark</div>';
-  document.getElementById('dynT').textContent='BENCHMARK';
-  document.getElementById('runBtn').disabled=false;
-  setStatus('IDLE');
-  if(resetN) AG.forEach(a=>{nstate[a.id]='idle'});
-}
-
-// ── init ───────────────────────────────────────────────────────────────────────
-connectWS();
-setInterval(()=>{if(ws&&ws.readyState===1)wsSend({action:'ping'})},5000);
-
-// start force simulation
-requestAnimationFrame(forceStep);
+// ── boot ──────────────────────────────────────────────────────────────────────
+drawStatic();renderSandbox();
+function tick(){const d=new Date();$('clk').textContent=d.toLocaleTimeString([], {hour12:false});
+  $('date').textContent=d.toLocaleDateString([], {weekday:'short',day:'numeric',month:'short'});renderRoster();if(selected)renderInfo()}
+tick();setInterval(tick,1000);
+connect();
+if(!/^https?:/.test(location.protocol))setStatus('OFFLINE');
+document.fonts&&document.fonts.ready.then(()=>{});
+requestAnimationFrame(frame);
 </script>
 </body>
 </html>

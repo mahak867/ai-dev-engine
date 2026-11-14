@@ -469,3 +469,22 @@ class TestPublicDemo:
         server._run_society("s", "t", {"provider": "groq", "key": "gsk_" + "c" * 40})
         assert seen == {"key": "gsk_" + "c" * 40, "model": "groq/llama-3.3-70b"}
         assert provider._key("GROQ_API_KEY") == ""
+
+
+class TestOfficeDashboard:
+    def test_office_and_classic_served(self, monkeypatch):
+        pytest.importorskip("httpx")
+        from fastapi.testclient import TestClient
+        import server
+        c = TestClient(server.app, base_url="http://localhost:8000")
+        office = c.get("/")
+        assert office.status_code == 200 and "APEX SOCIETY OFFICE" in office.text
+        classic = c.get("/classic")
+        assert classic.status_code == 200 and "<html" in classic.text.lower()
+
+    def test_office_knows_all_nine_agents(self):
+        html = (ROOT / "dashboard.html").read_text(encoding="utf-8")
+        for name in ("Planner", "Architect", "Coder", "Reviewer", "SelfHealer",
+                     "Debugger", "Executor", "DocWriter", "Memory"):
+            assert f"id:'{name}'" in html, name
+        assert "innerHTML" in html and "esc(" in html  # server text is escaped before insertion

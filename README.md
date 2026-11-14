@@ -4,9 +4,9 @@
 
 One sentence in, a working project out. Nine agents plan, write, review, **run** and repair the code, and they can disagree: the Reviewer rejects the Coder's work and forces revisions, and the Executor runs the result in a network-isolated Docker sandbox and sends real test failures back to be fixed.
 
-![APEX Society dashboard — demo replay](docs/demo.gif)
+![APEX Society office: nine pixel-art agents working in an isometric office](docs/demo.gif)
 
-<sub>Dashboard during a demo replay (canned agent outputs, no LLM). Real runs look the same and stream live.</sub>
+<sub>The live office during a demo run. Each agent is a tiny worker with a desk in their team's room: they walk over to hand off work, argue in speech bubbles, and the Executor lights up the server racks when the Docker sandbox runs. Real runs stream the same way.</sub>
 
 Built for the [Global AI Hackathon Series with Qwen Cloud](https://qwencloud-hackathon.devpost.com/) (Track 3: Agent Society) · [demo video](https://youtu.be/XBzURya6XAk)
 
@@ -76,7 +76,7 @@ cp .env.example .env            # add GROQ_API_KEY (free) or QWEN_API_KEY
 python server.py                # http://localhost:8000  (binds 127.0.0.1)
 ```
 
-In the dashboard you can paste a key just for one run, or tick **demo replay** to watch the pipeline with no key.
+The dashboard is a live isometric office. Click any worker to inspect their recent activity and token usage. Paste a key for one run, or tick **demo replay** to watch the pipeline with no key. Opening `dashboard.html` directly (no server) plays an offline demo. The original node-graph view is at `/classic`.
 
 ### MCP server (Claude Desktop, Claude Code, Cursor)
 
@@ -163,7 +163,7 @@ core/
   web_security.py        host/origin/token checks, rate limiting
 eval/                    30-task harness, independent scoring, bootstrap stats
 apex_mcp.py              MCP server (official SDK; stdio + Streamable HTTP)
-server.py · dashboard.html   FastAPI + WebSocket backend and live dashboard
+server.py · dashboard.html   FastAPI + WebSocket backend and the live pixel-art office (classic view: dashboard-classic.html)
 mcp_server.py            REST tool API used by the dashboard
 Dockerfile · scripts/deploy_hf_space.py   container + Hugging Face Space deploy
 tests/                   unit, security-boundary, sandbox (real Docker), MCP and demo-mode tests
