@@ -28,9 +28,9 @@ from __future__ import annotations
 import hmac
 import ipaddress
 import os
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Iterable
 
 LOOPBACK_NAMES = {"localhost", "127.0.0.1", "::1", "[::1]"}
 PROVIDER_KEY_VARS = ("QWEN_API_KEY", "DASHSCOPE_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY",

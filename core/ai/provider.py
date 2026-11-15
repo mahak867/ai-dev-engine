@@ -3,9 +3,17 @@ APEX AI Dev Engine v3 — Multi-Provider Router
 Qwen Cloud (primary/hackathon) + Groq (free fallback) + Ollama (local) + optional paid.
 """
 from __future__ import annotations
-import os, json, time, logging, threading, contextvars
+
+import contextvars
+import json
+import logging
+import os
+import threading
+import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import Callable, Iterator
+from typing import Any
+
 import requests
 
 from core import telemetry
@@ -13,7 +21,7 @@ from core import telemetry
 log = logging.getLogger("apex.provider")
 
 # ── Model catalogue ────────────────────────────────────────────────────────────
-MODELS = {
+MODELS: dict[str, dict[str, Any]] = {
     # ── PRIMARY: Qwen Cloud (hackathon requirement) ───────────────────────────
     # Qwen 3.7 (launched May 20, 2026) — agent-tuned flagship, 1M context, no
     # free tier; billed against hackathon DashScope credits. Plus adds vision
@@ -52,7 +60,7 @@ MODELS = {
 # ── Per-request API keys (bring-your-own-key) ──────────────────────────────────
 # The hosted demo lets a visitor paste their own key. It is held in a context
 # variable for that one run only — never written to os.environ, disk or logs.
-_key_overrides: contextvars.ContextVar[dict] = contextvars.ContextVar("apex_key_overrides", default={})
+_key_overrides: contextvars.ContextVar[dict | None] = contextvars.ContextVar("apex_key_overrides", default=None)
 
 
 _model_override: contextvars.ContextVar[str] = contextvars.ContextVar("apex_model_override", default="")
@@ -65,7 +73,7 @@ def api_keys(model: str | None = None, **keys: str):
     these keys (and optionally pin one model) for every call in this context.
     """
     clean = {k: v.strip() for k, v in keys.items() if isinstance(v, str) and v.strip()}
-    token = _key_overrides.set({**_key_overrides.get(), **clean})
+    token = _key_overrides.set({**(_key_overrides.get() or {}), **clean})
     mtoken = _model_override.set(model) if model else None
     try:
         yield
@@ -76,7 +84,7 @@ def api_keys(model: str | None = None, **keys: str):
 
 
 def _key(name: str) -> str:
-    return _key_overrides.get().get(name) or os.getenv(name, "")
+    return (_key_overrides.get() or {}).get(name) or os.getenv(name) or ""
 
 
 def byok_active() -> bool:
@@ -352,7 +360,7 @@ class LLMProvider:
                     data = r.json()
                     self._usage.value = data.get("usage") or None
                     return data["choices"][0]["message"]["content"]
-                def _gen():
+                def _gen(r=r):
                     for line in r.iter_lines():
                         if line and line.startswith(b"data: "):
                             data = line[6:]

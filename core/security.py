@@ -12,55 +12,20 @@ Run generated code in a disposable container/VM if it is untrusted.
 """
 from __future__ import annotations
 
-import ipaddress
 import os
 import re
 import shlex
 import signal
-import socket
 import subprocess
-import sys
 import tempfile
 import time
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import Iterable, Mapping, Sequence
-from urllib.parse import urlparse
 
 
 class UnsafePathError(ValueError):
     """A model- or user-supplied path tried to leave its root."""
-
-
-class ExecutionDisabledError(RuntimeError):
-    """Raised when a side-effecting action runs without explicit approval."""
-
-
-# ── Feature gates ──────────────────────────────────────────────────────────────
-_TRUTHY = {"1", "true", "yes", "on"}
-
-
-def env_flag(name: str, default: bool = False) -> bool:
-    val = os.environ.get(name)
-    if val is None:
-        return default
-    return val.strip().lower() in _TRUTHY
-
-
-def execution_allowed() -> bool:
-    """Host-side execution of generated code / installs is opt-in."""
-    return env_flag("APEX_ALLOW_EXECUTION", False)
-
-
-def require_approval(action: str, approved: bool | None) -> None:
-    """Fail closed unless the caller (or env) explicitly approved ``action``."""
-    if approved is None:
-        approved = execution_allowed()
-    if not approved:
-        raise ExecutionDisabledError(
-            f"'{action}' runs code on this machine and is disabled by default. "
-            f"Pass approved=True / allow_execution=True or set APEX_ALLOW_EXECUTION=1."
-        )
 
 
 # ── Path containment ───────────────────────────────────────────────────────────
@@ -220,10 +185,7 @@ class ProcResult:
 
 def to_argv(cmd: str | Sequence[str]) -> list[str]:
     """Normalise a command to an argv list. Strings are split, never shell-parsed."""
-    if isinstance(cmd, str):
-        argv = shlex.split(cmd, posix=os.name != "nt")
-    else:
-        argv = [str(c) for c in cmd]
+    argv = shlex.split(cmd, posix=os.name != "nt") if isinstance(cmd, str) else [str(c) for c in cmd]
     if not argv:
         raise ValueError("empty command")
     return argv
@@ -303,36 +265,6 @@ def run_argv(
     )
 
 
-def python_argv(*args: str) -> list[str]:
-    return [sys.executable, *args]
-
-
-# ── Outbound URL policy (SSRF) ─────────────────────────────────────────────────
-def check_public_url(url: str) -> str:
-    """
-    Allow only http(s) URLs whose host resolves exclusively to public IPs.
-    Blocks loopback, RFC1918, link-local (cloud metadata 169.254.169.254),
-    CGNAT, multicast and reserved ranges. Returns the URL or raises ValueError.
-    """
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise ValueError(f"scheme not allowed: {parsed.scheme!r}")
-    host = parsed.hostname
-    if not host:
-        raise ValueError("URL has no host")
-    if parsed.username or parsed.password:
-        raise ValueError("credentials in URL not allowed")
-    try:
-        infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80))
-    except socket.gaierror as e:
-        raise ValueError(f"cannot resolve {host!r}: {e}") from e
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0])
-        if not ip.is_global or ip.is_multicast:
-            raise ValueError(f"{host!r} resolves to non-public address {ip}")
-    return url
-
-
 # ── Redaction ──────────────────────────────────────────────────────────────────
 _SECRET_PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9_\-]{16,}"),                 # OpenAI/DashScope style
@@ -351,8 +283,5 @@ def redact(text: str) -> str:
     if not text:
         return text
     for pat in _SECRET_PATTERNS:
-        if pat.groups:
-            text = pat.sub(lambda m: m.group(1) + "[REDACTED]", text)
-        else:
-            text = pat.sub("[REDACTED]", text)
+        text = pat.sub(lambda m: m.group(1) + "[REDACTED]", text) if pat.groups else pat.sub("[REDACTED]", text)
     return text

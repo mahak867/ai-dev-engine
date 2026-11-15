@@ -25,11 +25,11 @@ import json
 import os
 import threading
 import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
-from typing import Callable, Iterator
 
-_tracker: contextvars.ContextVar["UsageTracker | None"] = contextvars.ContextVar("apex_tracker", default=None)
+_tracker: contextvars.ContextVar[UsageTracker | None] = contextvars.ContextVar("apex_tracker", default=None)
 _agent: contextvars.ContextVar[str] = contextvars.ContextVar("apex_agent", default="unattributed")
 
 
@@ -141,7 +141,7 @@ class UsageTracker:
             "total_tokens": sum(r.prompt_tokens + r.completion_tokens for r in recs),
             "llm_seconds": round(sum(r.seconds for r in recs), 2),
             "wall_seconds": round(time.time() - self.started, 2),
-            "cost_usd": round(sum(costs), 6) if recs and all(c is not None for c in costs) else (0.0 if not recs else None),
+            "cost_usd": round(sum(c for c in costs if c is not None), 6) if recs and all(c is not None for c in costs) else (0.0 if not recs else None),
             "estimated_tokens": any(r.estimated for r in recs),
             "by_agent": by_agent,
         }
@@ -185,7 +185,7 @@ def current_agent() -> str:
     return _agent.get()
 
 
-def current_tracker() -> "UsageTracker | None":
+def current_tracker() -> UsageTracker | None:
     return _tracker.get()
 
 

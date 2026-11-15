@@ -37,8 +37,11 @@ jobs:
       - name: Install dev dependencies
         run: pip install -r requirements-dev.txt
 
-      - name: Lint (syntax for the lowest supported Python, undefined names)
-        run: python -m ruff check --select E9,F .
+      - name: Lint
+        run: python -m ruff check .
+
+      - name: Type check
+        run: python -m mypy
 
       - name: Pre-pull sandbox image
         run: docker pull -q python:3.12-slim
@@ -51,7 +54,7 @@ jobs:
         run: |
           mkdir -p "$HOME"
           # pytest exits non-zero (5) when zero tests are collected.
-          python -m pytest tests/ -v --tb=short
+          python -m pytest tests/ -v --tb=short --cov --cov-report=term-missing:skip-covered --cov-fail-under=75
           test ! -d "$GITHUB_WORKSPACE/.apex"
 
   eval-selftest:

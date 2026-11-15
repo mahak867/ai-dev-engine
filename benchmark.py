@@ -10,12 +10,18 @@ Usage:
     py benchmark.py --export results.json
 """
 from __future__ import annotations
+
 from dotenv import load_dotenv
+
 load_dotenv()
 
-import argparse, json, time, os, logging
-from pathlib import Path
+import argparse
+import json
+import logging
+import os
+import time
 from datetime import datetime
+from pathlib import Path
 
 logging.basicConfig(level=logging.WARNING)
 
