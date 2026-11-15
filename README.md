@@ -123,8 +123,7 @@ Generated code and model output are untrusted (OWASP LLM05 / LLM06).
 | DNS rebinding / CSRF | `Host` and `Origin` allowlists; no wildcard CORS |
 | File writes | Every model-chosen path goes through `safe_join`: no `..`, absolute paths, `.git/`, or symlink escapes; atomic writes |
 | Running code | **Docker sandbox**: `--network none`, read-only root, `--cap-drop ALL`, `no-new-privileges`, non-root, memory/CPU/PID limits, hard timeout. Dependencies are installed host-side as **wheels only** (no `setup.py` runs), and option lines in generated `requirements.txt` are stripped |
-| Host execution | Off unless `APEX_ALLOW_EXECUTION=1`; no shell, minimal env (no API keys), process-group kill |
-| Agent tools | `python_eval` is literal-only; `web_fetch` blocks private, loopback and metadata IPs |
+| Host processes | The only host-side commands are `docker` and wheel-only `pip`; run with no shell, a minimal env (no API keys) and process-group kill |
 | Memory | 0600 files, secrets redacted, no file contents, pruned to 500 records / 90 days |
 
 ---
@@ -144,7 +143,6 @@ Generated code and model output are untrusted (OWASP LLM05 / LLM06).
 | `APEX_ALLOWED_HOSTS` / `APEX_ALLOWED_ORIGINS` | Host / Origin allowlists (`.hf.space` / `https://*.hf.space` wildcards) |
 | `APEX_PUBLIC_DEMO` / `APEX_RUNS_PER_HOUR` | Public demo mode and its per-visitor run limit |
 | `APEX_MAX_CONCURRENT_JOBS` / `APEX_MAX_TASK_CHARS` | Abuse / cost limits (2 / 500) |
-| `APEX_ALLOW_EXECUTION` | Allow unsandboxed host execution / deploys |
 | `APEX_MEMORY_DIR` | Memory location (default `~/.apex/memory`) |
 
 ---
@@ -153,24 +151,29 @@ Generated code and model output are untrusted (OWASP LLM05 / LLM06).
 
 ```
 core/
-  orchestrator.py        9-agent pipeline (parallel Planner∥Architect, review loop, sandbox heal loop)
+  orchestrator.py        9-agent pipeline, one method per stage (parallel plan, review loop, sandbox heal loop)
   agents/base.py         the 7 LLM agents
   execution/sandbox.py   Executor's Docker sandbox
   memory/store.py        Memory agent's store (redacted, pruned)
   ai/provider.py         multi-provider router, per-run BYOK keys
   telemetry.py           per-agent tokens / cost / latency
-  security.py            path containment, no-shell exec, SSRF guard, redaction
+  syntax_check.py        static syntax validation of generated files
+  security.py            path containment, no-shell exec, redaction
   web_security.py        host/origin/token checks, rate limiting
 eval/                    30-task harness, independent scoring, bootstrap stats
 apex_mcp.py              MCP server (official SDK; stdio + Streamable HTTP)
 server.py · dashboard.html   FastAPI + WebSocket backend and the live pixel-art office (classic view: dashboard-classic.html)
 mcp_server.py            REST tool API used by the dashboard
 Dockerfile · scripts/deploy_hf_space.py   container + Hugging Face Space deploy
-tests/                   unit, security-boundary, sandbox (real Docker), MCP and demo-mode tests
+tests/                   unit, pipeline, security-boundary, sandbox (real Docker), MCP and demo-mode tests
 ```
 
 ```bash
-python -m pytest            # sandbox tests run when Docker is available
+pip install -r requirements-dev.txt
+python -m pytest --cov       # sandbox tests run when Docker is available
+python -m ruff check . && python -m mypy
 ```
+
+CI runs lint, type checks and the test suite with a coverage gate on Python 3.10–3.13, plus the real Docker sandbox tests, the eval self-test, a wheel install and a container build.
 
 MIT licensed.

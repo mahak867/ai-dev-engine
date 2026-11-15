@@ -66,8 +66,8 @@ REPLAY_MODEL = "fake/canned"
 
 def _install_replay_llm():
     """Canned outputs for the no-key 'demo replay' — clearly labelled, costs nothing."""
-    from core.ai import provider
     from core import demo_llm as fake_llm
+    from core.ai import provider
     delay = float(os.environ.get("APEX_REPLAY_DELAY", "0.8"))
 
     def slow(messages):
@@ -79,6 +79,7 @@ def _install_replay_llm():
 def _llm_context(byok: dict | None):
     """Context manager that scopes a visitor's key / replay model to one run."""
     from contextlib import nullcontext
+
     from core.ai.provider import api_keys
     if not byok:
         return nullcontext()
@@ -237,6 +238,7 @@ def _run_society(session_id: str, task: str, byok: dict | None = None):
 
 def _run_society_inner(session_id: str, task: str, replay: bool = False):
     import tempfile
+
     from core import telemetry
     from core.memory.store import MemoryStore
     from core.orchestrator import Orchestrator

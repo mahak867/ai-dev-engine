@@ -6,11 +6,16 @@ Debugger, DocWriter. Tool agents: Executor (core/execution — sandboxed build &
 test) and Memory (core/memory — cross-run learning).
 """
 from __future__ import annotations
-import re, json, logging, time
+
+import json
+import logging
+import re
+import time
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Iterator
-from core.ai.provider import LLMProvider
+
 from core import telemetry
+from core.ai.provider import LLMProvider
 
 log = logging.getLogger("apex.agents")
 
@@ -98,7 +103,7 @@ class Agent:
         """Try every known path-location pattern for a single code block."""
         lines = body.split('\n')
         # skip leading blank lines when looking for the path comment
-        content_lines = [l for l in lines if l.strip() != ""] or lines
+        content_lines = [ln for ln in lines if ln.strip() != ""] or lines
         first_line = content_lines[0].strip() if content_lines else ""
 
         # Broad extension list covering common full-stack + config files

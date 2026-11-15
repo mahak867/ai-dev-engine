@@ -2,14 +2,16 @@
 APEX v3 — Full test suite (no API keys required, no network calls)
 Run: python -m pytest tests/ -v
 """
-import os, sys
+import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 
 def _orch(tmp_path, **kw):
     """Orchestrator with an injected temp MemoryStore (never touches ~/.apex)."""
-    from core.orchestrator import Orchestrator
     from core.memory.store import MemoryStore
+    from core.orchestrator import Orchestrator
     return Orchestrator(dry_run=True, memory_store=MemoryStore(str(tmp_path / "mem")), **kw)
 
 
@@ -20,13 +22,13 @@ class TestProvider:
         assert len(FREE_MODELS) >= 4
 
     def test_all_cascades_are_free_only(self):
-        from core.ai.provider import DEFAULT_CASCADE, CODING_CASCADE, REASONING_CASCADE, MODELS
+        from core.ai.provider import CODING_CASCADE, DEFAULT_CASCADE, MODELS, REASONING_CASCADE
         for cascade in [DEFAULT_CASCADE, CODING_CASCADE, REASONING_CASCADE]:
             for model in cascade:
                 assert MODELS[model]["free"] is True, f"{model} in cascade must be free"
 
     def test_paid_models_marked_correctly(self):
-        from core.ai.provider import PAID_MODELS, MODELS
+        from core.ai.provider import MODELS, PAID_MODELS
         for m in PAID_MODELS:
             assert MODELS[m]["free"] is False
 
@@ -55,7 +57,8 @@ class TestProvider:
     def test_no_paid_in_cascade_without_keys(self):
         """Without any paid API keys, cascade must contain only free models."""
         import os
-        from core.ai.provider import LLMProvider, MODELS
+
+        from core.ai.provider import MODELS, LLMProvider
         env_backup = {}
         for k in ["OPENROUTER_API_KEY", "TOGETHER_API_KEY", "MISTRAL_API_KEY"]:
             env_backup[k] = os.environ.pop(k, None)
@@ -116,8 +119,13 @@ class TestAgents:
 
     def test_all_agents_instantiate(self):
         from core.agents.base import (
-            PlannerAgent, ArchitectAgent, CoderAgent,
-            ReviewerAgent, DebuggerAgent, SelfHealerAgent, DocWriterAgent,
+            ArchitectAgent,
+            CoderAgent,
+            DebuggerAgent,
+            DocWriterAgent,
+            PlannerAgent,
+            ReviewerAgent,
+            SelfHealerAgent,
         )
         for AgentClass in [PlannerAgent, ArchitectAgent, CoderAgent,
                            ReviewerAgent, DebuggerAgent, SelfHealerAgent, DocWriterAgent]:
@@ -134,8 +142,9 @@ class TestMemory:
         assert len(m.id) == 8
 
     def test_two_projects_have_different_ids(self):
-        from core.memory.store import ProjectMemory
         import time
+
+        from core.memory.store import ProjectMemory
         m1 = ProjectMemory(name="app1", request="req1")
         time.sleep(0.01)
         m2 = ProjectMemory(name="app2", request="req2")
@@ -229,36 +238,3 @@ class TestOrchestrator:
 
 
 # ── Executor ────────────────────────────────────────────────────────────────────
-class TestExecutor:
-    def test_echo_command_passes(self, tmp_path):
-        from core.execution.runner import Executor
-        r = Executor(str(tmp_path), allow_execution=True).run([sys.executable, "-c", "print('hello')"])
-        assert r.ok
-        assert "hello" in r.stdout
-
-    def test_failing_command(self, tmp_path):
-        from core.execution.runner import Executor
-        r = Executor(str(tmp_path), allow_execution=True).run([sys.executable, "-c", "import sys; sys.exit(1)"])
-        assert not r.ok
-
-    def test_run_python_file(self, tmp_path):
-        from core.execution.runner import Executor
-        (tmp_path / "hello.py").write_text('print("apex v3")')
-        r = Executor(str(tmp_path), allow_execution=True).run_file("hello.py")
-        assert r.ok
-        assert "apex v3" in r.stdout
-
-    def test_no_deps_file(self, tmp_path):
-        from core.execution.runner import Executor
-        r = Executor(str(tmp_path), allow_execution=True).install_deps()
-        assert "No deps" in r.stdout
-
-    def test_exec_result_ok_property(self, tmp_path):
-        from core.execution.runner import Executor
-        r = Executor(str(tmp_path), allow_execution=True).run([sys.executable, "-c", "print('ok')"])
-        assert r.ok is True
-
-    def test_exec_result_duration(self, tmp_path):
-        from core.execution.runner import Executor
-        r = Executor(str(tmp_path), allow_execution=True).run([sys.executable, "-c", "print('hi')"])
-        assert r.duration >= 0
