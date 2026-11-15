@@ -20,8 +20,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-INCLUDE = ["Dockerfile", ".dockerignore", "requirements.txt", "server.py", "mcp_server.py",
-           "benchmark.py", "dashboard.html", "dashboard-classic.html", "LICENSE", "core"]
+INCLUDE = ["Dockerfile", ".dockerignore", "requirements.txt", "LICENSE", "apex"]
 
 
 def main() -> int:

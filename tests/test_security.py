@@ -37,24 +37,24 @@ class TestSafeJoin:
         "src/.git/config", "CON", "nul.txt", "x" * 300,
     ])
     def test_rejects_unsafe(self, tmp_path, bad):
-        from core.security import UnsafePathError, safe_join
+        from apex.security import UnsafePathError, safe_join
         with pytest.raises(UnsafePathError):
             safe_join(tmp_path, bad)
 
     def test_allows_nested(self, tmp_path):
-        from core.security import safe_join
+        from apex.security import safe_join
         p = safe_join(tmp_path, "backend/app/./main.py")
         assert p == (tmp_path / "backend" / "app" / "main.py").resolve()
 
     def test_allows_dotfiles(self, tmp_path):
-        from core.security import safe_join
+        from apex.security import safe_join
         safe_join(tmp_path, ".gitignore")
         safe_join(tmp_path, ".github/workflows/ci.yml")
         safe_join(tmp_path, ".env.example")
 
     def test_sibling_prefix_is_outside(self, tmp_path):
         """The exact startswith() bug from the report: /x/project vs /x/project-other."""
-        from core.security import UnsafePathError, safe_join
+        from apex.security import UnsafePathError, safe_join
         root = tmp_path / "project"
         root.mkdir()
         (tmp_path / "project-other").mkdir()
@@ -65,7 +65,7 @@ class TestSafeJoin:
 
     @pytest.mark.skipif(IS_WIN, reason="symlinks need privileges on Windows")
     def test_symlink_escape_rejected(self, tmp_path):
-        from core.security import UnsafePathError, safe_write_text
+        from apex.security import UnsafePathError, safe_write_text
         root = tmp_path / "root"
         outside = tmp_path / "outside"
         root.mkdir(); outside.mkdir()
@@ -76,7 +76,7 @@ class TestSafeJoin:
 
     @pytest.mark.skipif(IS_WIN, reason="symlinks need privileges on Windows")
     def test_final_symlink_replaced_not_followed(self, tmp_path):
-        from core.security import UnsafePathError, safe_write_text
+        from apex.security import UnsafePathError, safe_write_text
         root = tmp_path / "root"; root.mkdir()
         target = tmp_path / "victim.txt"; target.write_text("original")
         (root / "f.txt").symlink_to(target)
@@ -85,7 +85,7 @@ class TestSafeJoin:
         assert target.read_text() == "original"
 
     def test_atomic_write_and_size_cap(self, tmp_path):
-        from core.security import UnsafePathError, safe_write_text
+        from apex.security import UnsafePathError, safe_write_text
         p = safe_write_text(tmp_path, "a/b.txt", "hello")
         assert p.read_text() == "hello"
         with pytest.raises(UnsafePathError):
@@ -96,8 +96,8 @@ class TestSafeJoin:
 class TestOrchestratorWrites:
     def test_model_paths_are_contained(self, tmp_path):
         """LLM-parsed filenames are untrusted (OWASP LLM05: improper output handling)."""
-        from core.memory.store import MemoryStore
-        from core.orchestrator import Orchestrator
+        from apex.memory.store import MemoryStore
+        from apex.orchestrator import Orchestrator
         sentinel = tmp_path / "sentinel.txt"
         sentinel.write_text("untouched")
         orch = Orchestrator(dry_run=True, memory_store=MemoryStore(str(tmp_path / "mem")))
@@ -112,9 +112,9 @@ class TestOrchestratorWrites:
         assert not (out / ".git").exists()
 
     def test_project_name_must_be_single_component(self, tmp_path):
-        from core.memory.store import MemoryStore
-        from core.orchestrator import Orchestrator
-        from core.security import UnsafePathError
+        from apex.memory.store import MemoryStore
+        from apex.orchestrator import Orchestrator
+        from apex.security import UnsafePathError
         orch = Orchestrator(dry_run=True, memory_store=MemoryStore(str(tmp_path / "mem")))
         with pytest.raises(UnsafePathError):
             orch.generate_fullstack("../evil", "x", str(tmp_path / "out"))
@@ -129,14 +129,14 @@ class TestOrchestratorWrites:
 # ── X1: process execution primitive used by the sandbox ───────────────────────
 class TestRunArgv:
     def test_shell_metacharacters_are_inert(self, tmp_path):
-        from core.security import run_argv
+        from apex.security import run_argv
         run_argv(f'"{sys.executable}" -c "print(1)" ; touch pwned', tmp_path)
         assert not (tmp_path / "pwned").exists()
         r = run_argv([sys.executable, "-c", "import sys; print(sys.argv[1:])", "$(touch pwned2)", "`id`"], tmp_path)
         assert "$(touch pwned2)" in r.stdout and not (tmp_path / "pwned2").exists()
 
     def test_child_env_has_no_secrets(self, tmp_path, monkeypatch):
-        from core.security import run_argv
+        from apex.security import run_argv
         for var in ("QWEN_API_KEY", "AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN"):
             monkeypatch.setenv(var, "sk-should-not-leak-123456789")
         r = run_argv([sys.executable, "-c", "import os, json; print(json.dumps(sorted(os.environ)))"], tmp_path)
@@ -146,7 +146,7 @@ class TestRunArgv:
 
     @pytest.mark.skipif(IS_WIN, reason="POSIX process groups")
     def test_timeout_kills_process_tree(self, tmp_path):
-        from core.security import run_argv
+        from apex.security import run_argv
         script = tmp_path / "spawn.py"
         script.write_text(
             "import subprocess, sys, time\n"
@@ -160,13 +160,13 @@ class TestRunArgv:
         assert not _alive(int(r.stdout.split()[0])), "grandchild survived the timeout"
 
     def test_missing_binary_and_empty_command(self, tmp_path):
-        from core.security import run_argv
+        from apex.security import run_argv
         assert run_argv(["definitely-not-a-real-binary-xyz"], tmp_path).returncode == -1
         with pytest.raises(ValueError):
             run_argv("", tmp_path)
 
     def test_output_is_capped(self, tmp_path):
-        from core.security import run_argv
+        from apex.security import run_argv
         r = run_argv([sys.executable, "-c", "print('x' * 5000)"], tmp_path, max_output=100)
         assert "truncated" in r.stdout and len(r.stdout) < 200
 
@@ -174,7 +174,7 @@ class TestRunArgv:
 # ── O1: memory privacy / lifecycle ────────────────────────────────────────────
 class TestMemoryStore:
     def test_ids_cannot_traverse(self, tmp_path):
-        from core.memory.store import MemoryStore
+        from apex.memory.store import MemoryStore
         store = MemoryStore(str(tmp_path / "mem"))
         (tmp_path / "victim.json").write_text(json.dumps({"name": "x", "request": "y"}))
         assert store.load("../victim") is None
@@ -182,7 +182,7 @@ class TestMemoryStore:
         assert (tmp_path / "victim.json").exists()
 
     def test_secrets_redacted_and_contents_dropped(self, tmp_path):
-        from core.memory.store import MemoryStore, ProjectMemory
+        from apex.memory.store import MemoryStore, ProjectMemory
         store = MemoryStore(str(tmp_path))
         m = ProjectMemory(name="a", request="build app, my key is sk-abcdefghijklmnopqrstuv1234")
         m.update_files({"main.py": "SECRET='hunter2hunter2'"})
@@ -196,7 +196,7 @@ class TestMemoryStore:
 
     @pytest.mark.skipif(IS_WIN, reason="POSIX permissions")
     def test_file_permissions(self, tmp_path):
-        from core.memory.store import MemoryStore, ProjectMemory
+        from apex.memory.store import MemoryStore, ProjectMemory
         store = MemoryStore(str(tmp_path / "mem"))
         m = ProjectMemory(name="a", request="b")
         store.save(m)
@@ -205,14 +205,14 @@ class TestMemoryStore:
         assert stat.S_IMODE((tmp_path / "mem").stat().st_mode) == 0o700
 
     def test_retention_max_records(self, tmp_path):
-        from core.memory.store import MemoryStore, ProjectMemory
+        from apex.memory.store import MemoryStore, ProjectMemory
         store = MemoryStore(str(tmp_path), max_records=3)
         for i in range(6):
             store.save(ProjectMemory(name=f"p{i}", request="r", created=1000.0 + i))
         assert len(store.list_projects()) == 3
 
     def test_retention_max_age(self, tmp_path):
-        from core.memory.store import MemoryStore, ProjectMemory
+        from apex.memory.store import MemoryStore, ProjectMemory
         store = MemoryStore(str(tmp_path), max_age_days=1)
         m = ProjectMemory(name="old", request="r")
         store.save(m)
@@ -221,12 +221,12 @@ class TestMemoryStore:
         assert store.prune() == 1
 
     def test_default_dir_respects_env(self, tmp_path, monkeypatch):
-        from core.memory.store import MemoryStore
+        from apex.memory.store import MemoryStore
         monkeypatch.setenv("APEX_MEMORY_DIR", str(tmp_path / "custom"))
         assert MemoryStore().dir == tmp_path / "custom"
 
     def test_clear(self, tmp_path):
-        from core.memory.store import MemoryStore, ProjectMemory
+        from apex.memory.store import MemoryStore, ProjectMemory
         store = MemoryStore(str(tmp_path))
         store.save(ProjectMemory(name="a", request="b"))
         assert store.clear() == 1 and store.list_projects() == []
@@ -234,7 +234,7 @@ class TestMemoryStore:
 
 class TestRedactAndUrls:
     def test_redact(self):
-        from core.security import redact
+        from apex.security import redact
         assert "[REDACTED]" in redact("api_key = abcdefghijkl")
         assert redact("plain text") == "plain text"
 
@@ -247,7 +247,7 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setenv("APEX_RUNS_DIR", str(tmp_path / "runs"))
     from fastapi.testclient import TestClient
 
-    import server
+    from apex import server
     monkeypatch.setattr(server, "RUNS_DIR", (tmp_path / "runs").resolve())
     (tmp_path / "runs").mkdir()
     server.sessions.clear()
@@ -255,7 +255,7 @@ def client(monkeypatch, tmp_path):
 
 
 def _token(monkeypatch, value="t0ken-for-tests"):
-    from core.web_security import get_settings
+    from apex.web_security import get_settings
     monkeypatch.setenv("APEX_API_TOKEN", value)
     get_settings.cache_clear()
     return value
@@ -295,7 +295,7 @@ class TestServer:
         assert client.get("/api/sessions/nope/dialogue").status_code == 404
 
     def test_session_glob_injection(self, client, tmp_path):
-        import server
+        from apex import server
         d = server.RUNS_DIR / "abcdef0123456789"
         d.mkdir(parents=True)
         (d / "secret.txt").write_text("x")
@@ -310,7 +310,7 @@ class TestServer:
         import io
         import zipfile
 
-        import server
+        from apex import server
         d = server.RUNS_DIR / "0123456789abcdef"
         d.mkdir(parents=True)
         (d / "ok.txt").write_text("ok")
@@ -343,27 +343,27 @@ class TestServer:
                 ws.receive_text()
 
     def test_ws_bad_json_and_caps(self, client, monkeypatch):
-        import server
+        from apex import server
         started = []
         monkeypatch.setattr(server, "_start_job", lambda fn, sid, task, *a: started.append(task) or True)
         with client.websocket_connect("ws://localhost:8000/ws") as ws:
             ws.send_text("not json")
             assert json.loads(ws.receive_text())["msg"] == "invalid JSON"
-            ws.send_text(json.dumps({"action": "benchmark", "task": "x" * 5000}))
+            ws.send_text(json.dumps({"action": "run", "task": "x" * 5000}))
             assert json.loads(ws.receive_text())["type"] == "session_created"
             ws.send_text("y" * 20000)
             assert json.loads(ws.receive_text())["msg"] == "message too large"
         assert len(started[0]) == 500
 
     def test_ws_busy_rejected(self, client, monkeypatch):
-        import server
+        from apex import server
         monkeypatch.setattr(server, "_start_job", lambda *a: False)
         with client.websocket_connect("ws://localhost:8000/ws") as ws:
             ws.send_text(json.dumps({"action": "run", "task": "x"}))
             assert "busy" in json.loads(ws.receive_text())["msg"]
 
     def test_events_not_broadcast_to_other_clients(self, client, monkeypatch):
-        import server
+        from apex import server
         monkeypatch.setattr(server, "_start_job", lambda *a: True)
         with client.websocket_connect("ws://localhost:8000/ws") as a, client.websocket_connect("ws://localhost:8000/ws"):
             a.send_text(json.dumps({"action": "run", "task": "secret project"}))
@@ -380,26 +380,22 @@ class TestServer:
         r = client.post("/mcp/tools/nope", json={"request": "x"})
         assert r.status_code == 400
 
-    def test_mcp_static_benchmark_labelled(self, client):
-        r = client.post("/mcp/tools/run_benchmark", json={"task": "x"})
-        assert r.status_code == 200 and r.json()["static"] is True
-
 
 class TestBindGuard:
     def test_public_bind_without_token_refused(self, monkeypatch):
-        from core.web_security import assert_safe_bind, get_settings
+        from apex.web_security import assert_safe_bind, get_settings
         get_settings.cache_clear()
         with pytest.raises(SystemExit):
             assert_safe_bind("0.0.0.0")
         assert_safe_bind("127.0.0.1")
 
     def test_public_bind_with_token_ok(self, monkeypatch):
-        from core.web_security import assert_safe_bind
+        from apex.web_security import assert_safe_bind
         _token(monkeypatch)
         assert_safe_bind("0.0.0.0")
 
     def test_default_host_is_loopback(self):
-        from core.web_security import get_settings
+        from apex.web_security import get_settings
         assert get_settings().host == "127.0.0.1"
 
 
@@ -408,11 +404,11 @@ class TestMcpStandalone:
         pytest.importorskip("fastapi")
         from fastapi.testclient import TestClient
 
-        import mcp_server
+        from apex import tool_api as mcp_server
         tok = _token(monkeypatch)
         c = TestClient(mcp_server.create_mcp_app(), base_url="http://127.0.0.1:8001")
         assert c.get("/mcp/tools").status_code == 401
         r = c.get("/mcp/tools", headers={"authorization": f"Bearer {tok}"})
-        assert r.status_code == 200 and r.json()["count"] == 8
+        assert r.status_code == 200 and r.json()["count"] == 7
         r = c.get("/mcp/health", headers={"origin": "https://evil.example"})
         assert r.status_code == 403

@@ -14,7 +14,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from core.security import redact
+from apex.security import redact
 
 # Where memory lives. Override with APEX_MEMORY_DIR (tests point this at a tmp dir).
 DEFAULT_MEMORY_DIR = "~/.apex/memory"

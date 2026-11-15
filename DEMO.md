@@ -80,5 +80,5 @@ curl http://127.0.0.1:8000/api/health
 # {"status":"ok"}
 
 curl http://127.0.0.1:8000/mcp/tools
-# lists the 8 typed tools (the society's 7 LLM agents + a static benchmark summary)
+# lists the 7 typed agent tools
 ```

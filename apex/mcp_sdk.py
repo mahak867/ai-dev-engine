@@ -34,7 +34,7 @@ from typing import Any
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
-from core.agent_tools import adapt_inputs
+from apex.agent_tools import adapt_inputs
 
 AGENTS = [
     {"name": "Planner", "kind": "llm", "role": "turns the request into a JSON plan (stack, files, routes, schema, security notes)"},
@@ -68,7 +68,7 @@ def agents() -> dict[str, Any]:
     global _agents
     with _lock:
         if _agents is None:
-            from core.agents.base import (
+            from apex.agents.base import (
                 ArchitectAgent,
                 CoderAgent,
                 DebuggerAgent,
@@ -77,7 +77,7 @@ def agents() -> dict[str, Any]:
                 ReviewerAgent,
                 SelfHealerAgent,
             )
-            from core.ai.provider import LLMProvider
+            from apex.ai.provider import LLMProvider
             llm, coding = LLMProvider("auto"), LLMProvider("coding")
             _agents = {
                 "plan_project": PlannerAgent(LLMProvider("reasoning")),
@@ -92,7 +92,7 @@ def agents() -> dict[str, Any]:
 
 
 def call_agent(tool: str, inputs: dict) -> dict:
-    from core import telemetry
+    from apex import telemetry
     tracker = telemetry.UsageTracker()
     with telemetry.track(tracker):
         result = agents()[tool].run(adapt_inputs(tool, inputs))
@@ -181,8 +181,8 @@ def build_server(host: str = "127.0.0.1", port: int = 8002) -> FastMCP:
         events: list[str] = []
 
         def work() -> dict:
-            from core import telemetry
-            from core.orchestrator import Orchestrator
+            from apex import telemetry
+            from apex.orchestrator import Orchestrator
             tracker = telemetry.UsageTracker()
             final: dict = {}
 
@@ -245,7 +245,7 @@ def main(argv=None) -> int:
         mcp.run("stdio")
         return 0
 
-    from core.web_security import is_loopback_host
+    from apex.web_security import is_loopback_host
     token = os.environ.get("APEX_API_TOKEN", "").strip()
     if not is_loopback_host(args.host) and not token:
         print(f"Refusing to bind {args.host!r} without APEX_API_TOKEN.", file=sys.stderr)

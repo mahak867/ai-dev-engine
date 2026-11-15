@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "apex-ai-dev-engine"
-version = "3.1.0"
-description = "APEX AI Dev Engine v3 — multi-agent, self-healing, free-model-first app generator"
+version = "4.0.0"
+description = "APEX Society: a 9-agent AI software team that plans, writes, reviews, sandbox-tests and repairs code"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -27,8 +27,8 @@ dependencies = [
 ]
 
 [project.scripts]
-apex = "cli:main"
-apex-mcp = "apex_mcp:main"
+apex = "apex.cli:main"
+apex-mcp = "apex.mcp_sdk:main"
 
 [project.optional-dependencies]
 # Dashboard / WebSocket server and the MCP-style tool server.
@@ -57,13 +57,12 @@ dev = [
     "mypy>=1.10",
 ]
 
-[tool.setuptools]
-# Top-level modules used by the `apex` entry point and the servers.
-py-modules = ["cli", "server", "mcp_server", "apex_mcp", "benchmark"]
-
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["core*"]
+include = ["apex*"]
+
+[tool.setuptools.package-data]
+apex = ["web/*.html", "evals/tasks.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -75,7 +74,7 @@ addopts = "-p no:cacheprovider --strict-markers"
 [tool.ruff]
 # Lowest supported Python — catches 3.12-only syntax (e.g. nested f-string quotes).
 target-version = "py310"
-extend-exclude = ["eval/results"]
+extend-exclude = ["eval-results"]
 line-length = 120
 
 [tool.ruff.lint]
@@ -88,14 +87,13 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E402", "E701", "E702", "SIM117"]
-"server.py" = ["E402"]        # load_dotenv() must run before app imports
-"mcp_server.py" = ["E402"]
-"benchmark.py" = ["E402"]
-"cli.py" = ["E402"]            # banner docstring precedes imports
-"eval/run_eval.py" = ["E402"] # sys.path bootstrap for running as a script
+"apex/server.py" = ["E402"]     # load_dotenv() must run before app imports
+"apex/tool_api.py" = ["E402"]
+"apex/benchmark.py" = ["E402"]
+"apex/cli.py" = ["E402"]        # banner docstring precedes imports
 
 [tool.coverage.run]
-source = ["core", "eval", "server", "mcp_server", "apex_mcp", "cli"]
+source = ["apex"]
 
 [tool.coverage.report]
 exclude_lines = ["pragma: no cover", "if __name__ == .__main__.:", "raise NotImplementedError"]
@@ -104,4 +102,4 @@ exclude_lines = ["pragma: no cover", "if __name__ == .__main__.:", "raise NotImp
 python_version = "3.10"
 ignore_missing_imports = true
 check_untyped_defs = false
-files = ["core"]
+files = ["apex"]

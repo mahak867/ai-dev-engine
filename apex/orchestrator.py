@@ -19,8 +19,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from core import telemetry
-from core.agents.base import (
+from apex import telemetry
+from apex.agents.base import (
     AgentResult,
     ArchitectAgent,
     CoderAgent,
@@ -30,11 +30,11 @@ from core.agents.base import (
     ReviewerAgent,
     SelfHealerAgent,
 )
-from core.ai.provider import LLMProvider
-from core.execution.sandbox import DockerSandbox, sandbox_enabled
-from core.memory.store import MemoryStore, ProjectMemory
-from core.security import UnsafePathError, safe_join, write_files_contained
-from core.syntax_check import check_syntax
+from apex.ai.provider import LLMProvider
+from apex.execution.sandbox import DockerSandbox, sandbox_enabled
+from apex.memory.store import MemoryStore, ProjectMemory
+from apex.security import UnsafePathError, safe_join, write_files_contained
+from apex.syntax_check import check_syntax
 
 MAX_REVIEW_ROUNDS = 3          # Reviewer ⇄ Coder rounds before proceeding anyway
 MIN_EXPECTED_FILES = 3         # fewer than this usually means the output failed to parse
@@ -83,10 +83,14 @@ class Orchestrator:
         model: str = "auto",
         dry_run: bool = False,
         on_event: Callable[..., None] | None = None,
+        sandbox: bool | None = None,
         on_dialogue: Callable[[str, str, str, str], None] | None = None,
         memory_store: MemoryStore | None = None,
     ):
         self.dry_run    = dry_run
+        # None: follow APEX_SANDBOX. True/False: force the Docker sandbox on/off.
+        self.use_sandbox = sandbox
+        self.last_run: _Run | None = None
         self.on_event: Callable[..., None] = on_event or (
             lambda agent, status, msg, extra=None: print(f"[{agent}] {status}: {msg}"))
         self.on_dialogue = on_dialogue  # callback(from_agent, to_agent, msg_type, content)
@@ -360,7 +364,7 @@ class Orchestrator:
             self._dialogue("Executor", "DocWriter", "validation",
                            f"Syntax validation: {report.passed}/{report.total} passed. "
                            f"Issues: {report.failed[:3]}")
-        if sandbox_enabled():
+        if sandbox_enabled() if self.use_sandbox is None else self.use_sandbox:
             run.files = self._sandbox_loop(run.files)
 
     def _stage_document(self, run: _Run) -> None:
@@ -376,6 +380,7 @@ class Orchestrator:
 
     def _finish(self, run: _Run) -> str:
         """Record what was learned, write the project to disk and report."""
+        self.last_run = run
         mem, review = run.mem, run.review
         score = review.score if review else 100
         mem.update_files(run.files)
