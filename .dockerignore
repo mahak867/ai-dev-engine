@@ -6,7 +6,8 @@
 .env.*
 !.env.example
 runs/
-eval/results/
+eval-results/
+examples/
 benchmark_runs/
 tests/
 deploy/

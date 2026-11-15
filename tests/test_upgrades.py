@@ -16,8 +16,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 @pytest.fixture
 def fake_llm(monkeypatch):
-    from core.ai import provider
-    from eval import fake_llm as fl
+    from apex import demo_llm as fl
+    from apex.ai import provider
     provider.set_fake_responder(fl.respond)
     monkeypatch.setenv("APEX_MODEL", "fake/canned")
     yield fl
@@ -27,8 +27,8 @@ def fake_llm(monkeypatch):
 # ── telemetry ─────────────────────────────────────────────────────────────────
 class TestTelemetry:
     def test_records_per_agent_through_pipeline(self, fake_llm, tmp_path):
-        from core.memory.store import MemoryStore
-        from core.orchestrator import Orchestrator
+        from apex.memory.store import MemoryStore
+        from apex.orchestrator import Orchestrator
         orch = Orchestrator(on_event=lambda *a, **k: None, memory_store=MemoryStore(str(tmp_path / "m")))
         orch.generate_fullstack("app1", "todo api", str(tmp_path / "out"))
         s = orch.last_usage.summary()
@@ -42,15 +42,15 @@ class TestTelemetry:
 
     def test_parallel_threads_attributed(self, fake_llm, tmp_path):
         """Planner and Architect run in threads; their calls must still be counted."""
-        from core.memory.store import MemoryStore
-        from core.orchestrator import Orchestrator
+        from apex.memory.store import MemoryStore
+        from apex.orchestrator import Orchestrator
         orch = Orchestrator(on_event=lambda *a, **k: None, memory_store=MemoryStore(str(tmp_path / "m")))
         orch.generate_fullstack("app2", "x", str(tmp_path / "out"))
         by = orch.last_usage.summary()["by_agent"]
         assert by["Planner"]["calls"] == 1 and by["Architect"]["calls"] == 1
 
     def test_usage_from_provider_and_prices(self, monkeypatch):
-        from core import telemetry
+        from apex import telemetry
         monkeypatch.setenv("APEX_PRICES", json.dumps({"groq/x": {"input": 1.0, "output": 2.0}}))
         telemetry.reload_prices()
         t = telemetry.UsageTracker()
@@ -67,8 +67,8 @@ class TestTelemetry:
         telemetry.reload_prices()
 
     def test_openai_usage_block_is_read(self, monkeypatch):
-        from core import telemetry
-        from core.ai.provider import LLMProvider
+        from apex import telemetry
+        from apex.ai.provider import LLMProvider
 
         class Resp:
             status_code = 200
@@ -86,7 +86,7 @@ class TestTelemetry:
         assert (rec.prompt_tokens, rec.completion_tokens, rec.estimated) == (11, 7, False)
 
     def test_byok_overrides_are_scoped(self, monkeypatch):
-        from core.ai.provider import _key, api_keys, byok_active
+        from apex.ai.provider import _key, api_keys, byok_active
         monkeypatch.delenv("GROQ_API_KEY", raising=False)
         assert _key("GROQ_API_KEY") == "" and not byok_active()
         with api_keys(GROQ_API_KEY="gsk_visitor"):
@@ -96,7 +96,7 @@ class TestTelemetry:
 
 # ── sandbox ───────────────────────────────────────────────────────────────────
 def _docker_image():
-    from core.execution.sandbox import docker_available
+    from apex.execution.sandbox import docker_available
     if not docker_available():
         return None
     img = os.environ.get("APEX_SANDBOX_IMAGE", "python:3.12-slim")
@@ -112,7 +112,7 @@ needs_docker = pytest.mark.skipif(shutil.which("docker") is None, reason="docker
 
 class TestSandboxUnit:
     def test_docker_argv_is_locked_down(self, tmp_path):
-        from core.execution.sandbox import DockerSandbox
+        from apex.execution.sandbox import DockerSandbox
         argv = DockerSandbox(image="img").docker_argv(tmp_path, ["python3", "-V"], "n")
         joined = " ".join(argv)
         for flag in ("--network none", "--read-only", "--cap-drop ALL", "no-new-privileges",
@@ -123,13 +123,13 @@ class TestSandboxUnit:
         assert argv[argv.index("img") + 1:] == ["python3", "-V"]
 
     def test_requirements_option_lines_are_stripped(self, tmp_path, monkeypatch):
-        from core.execution import sandbox as sb
+        from apex.execution import sandbox as sb
         captured = {}
 
         def fake_run(argv, cwd, **kw):
             captured["req"] = Path(argv[argv.index("-r") + 1]).read_text()
             captured["argv"] = argv
-            from core.security import ProcResult
+            from apex.security import ProcResult
             return ProcResult("", 0, 0.0)
 
         monkeypatch.setattr(sb, "run_argv", fake_run)
@@ -141,7 +141,7 @@ class TestSandboxUnit:
         assert "--only-binary=:all:" in captured["argv"]
 
     def test_disabled_without_env(self, monkeypatch):
-        from core.execution.sandbox import sandbox_enabled
+        from apex.execution.sandbox import sandbox_enabled
         monkeypatch.delenv("APEX_SANDBOX", raising=False)
         assert sandbox_enabled() is False
 
@@ -166,7 +166,7 @@ class TestSandboxDocker:
         return root / "proj"
 
     def test_passing_project(self, tmp_path):
-        from core.execution.sandbox import DockerSandbox
+        from apex.execution.sandbox import DockerSandbox
         p = self._project(tmp_path, "def add(a, b):\n    return a + b\n",
                           "import sys, os\nsys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))\n"
                           "from app import add\n\ndef test_add():\n    assert add(1, 2) == 3\n")
@@ -175,7 +175,7 @@ class TestSandboxDocker:
         assert rep.tests_passed == 1 and rep.import_ok
 
     def test_network_is_off_and_failures_reported(self, tmp_path):
-        from core.execution.sandbox import DockerSandbox
+        from apex.execution.sandbox import DockerSandbox
         test = ("import socket\n\ndef test_net():\n"
                 "    socket.create_connection(('1.1.1.1', 80), timeout=2)\n")
         p = self._project(tmp_path, "x = 1\n", test)
@@ -187,7 +187,7 @@ class TestSandboxDocker:
         import subprocess
         import time
 
-        from core.execution.sandbox import DockerSandbox
+        from apex.execution.sandbox import DockerSandbox
         sbx = DockerSandbox(timeout=3)
         t0 = time.time()
         r = sbx.run(tmp_path, ["python3", "-c", "import time; time.sleep(60)"])
@@ -196,17 +196,17 @@ class TestSandboxDocker:
         assert left.stdout.strip() == ""
 
     def test_cannot_see_host_secrets(self, tmp_path, monkeypatch):
-        from core.execution.sandbox import DockerSandbox
+        from apex.execution.sandbox import DockerSandbox
         monkeypatch.setenv("QWEN_API_KEY", "sk-must-not-leak-1234567890")
         r = DockerSandbox().run(tmp_path, ["python3", "-c", "import os; print(sorted(os.environ))"])
         assert "QWEN_API_KEY" not in r.stdout and r.returncode == 0
 
     def test_pipeline_heals_from_sandbox_failure(self, tmp_path, monkeypatch):
         """Executor finds a real failing test, SelfHealer gets the real output and fixes it."""
-        from core.ai import provider
-        from core.memory.store import MemoryStore
-        from core.orchestrator import Orchestrator
-        from eval import fake_llm
+        from apex import demo_llm as fake_llm
+        from apex.ai import provider
+        from apex.memory.store import MemoryStore
+        from apex.orchestrator import Orchestrator
         seen = {}
         broken = fake_llm._APP.replace('return jsonify(error="title required (1-200 chars)"), 400',
                                        'return jsonify(error="bad"), 418')
@@ -224,7 +224,7 @@ class TestSandboxDocker:
         provider.set_fake_responder(respond)
         monkeypatch.setenv("APEX_MODEL", "fake/canned")
         monkeypatch.setenv("APEX_SANDBOX", "docker")
-        from core.execution import sandbox as sb
+        from apex.execution import sandbox as sb
         sb.docker_available.cache_clear()
         try:
             orch = Orchestrator(on_event=lambda *a, **k: None, memory_store=MemoryStore(str(tmp_path / "m")))
@@ -241,8 +241,8 @@ class TestEval:
     def test_scoring_flags_bad_code(self, tmp_path):
         pytest.importorskip("bandit")
         pytest.importorskip("ruff")
-        from eval.fake_llm import _APP, _SINGLE_APP
-        from eval.scoring import score_project
+        from apex.demo_llm import _APP, _SINGLE_APP
+        from apex.evals.scoring import score_project
         bad, good = tmp_path / "bad", tmp_path / "good"
         bad.mkdir(); good.mkdir()
         (bad / "app.py").write_text(_SINGLE_APP)
@@ -253,13 +253,13 @@ class TestEval:
         assert sb["ruff_security"] > sg["ruff_security"]
 
     def test_getenv_fallback_secret_detected(self, tmp_path):
-        from eval.scoring import secret_hits
+        from apex.evals.scoring import secret_hits
         (tmp_path / "c.py").write_text('import os\nKEY = os.getenv("JWT_SECRET", "supersecretvalue")\nok = os.getenv("JWT_SECRET")\n')
         assert secret_hits(tmp_path) == 1
 
     def test_self_test_end_to_end(self, tmp_path):
         pytest.importorskip("bandit")
-        from eval import run_eval
+        from apex.evals import run_eval
         rc = run_eval.main(["--self-test", "--limit", "2", "--run-id", "t", "--out", str(tmp_path)])
         assert rc == 0
         s = json.loads((tmp_path / "t" / "summary.json").read_text())
@@ -272,12 +272,12 @@ class TestEval:
         assert (tmp_path / "t" / "results.jsonl").read_text().count("\n") == rows_before
 
     def test_bootstrap_ci(self):
-        from eval.run_eval import bootstrap_ci
+        from apex.evals.run_eval import bootstrap_ci
         lo, hi = bootstrap_ci([1.0, 2.0, 3.0, 4.0])
         assert 1.0 <= lo <= 2.5 <= hi <= 4.0
 
     def test_tasks_file(self):
-        tasks = json.loads((ROOT / "eval" / "tasks.json").read_text())
+        tasks = json.loads((ROOT / "apex" / "evals" / "tasks.json").read_text())
         assert len(tasks) == 30 and len({t["id"] for t in tasks}) == 30
 
 
@@ -296,7 +296,7 @@ def _session_call(server, coro_fn):
 
 class TestMcpSdk:
     def test_lists_tools_and_resource(self):
-        import apex_mcp
+        from apex import mcp_sdk as apex_mcp
         server = apex_mcp.build_server()
 
         async def f(c):
@@ -310,7 +310,7 @@ class TestMcpSdk:
         assert roster["count"] == 9
 
     def test_review_and_generate_project(self, fake_llm, tmp_path, monkeypatch):
-        import apex_mcp
+        from apex import mcp_sdk as apex_mcp
         monkeypatch.setenv("APEX_MCP_OUTPUT_DIR", str(tmp_path / "projects"))
         apex_mcp._agents = None
         server = apex_mcp.build_server()
@@ -332,7 +332,7 @@ class TestMcpSdk:
         apex_mcp._agents = None
 
     def test_http_refuses_public_bind_without_token(self, monkeypatch):
-        import apex_mcp
+        from apex import mcp_sdk as apex_mcp
         monkeypatch.delenv("APEX_API_TOKEN", raising=False)
         assert apex_mcp.main(["--http", "--host", "0.0.0.0"]) == 2
 
@@ -340,14 +340,14 @@ class TestMcpSdk:
         pytest.importorskip("httpx")
         from starlette.testclient import TestClient
 
-        import apex_mcp
+        from apex import mcp_sdk as apex_mcp
         app = apex_mcp._bearer_wrap(apex_mcp.build_server().streamable_http_app(), "s3cret")
         c = TestClient(app, base_url="http://127.0.0.1:8002")
         assert c.post("/mcp", json={}).status_code == 401
         assert c.post("/mcp", json={}, headers={"authorization": "Bearer wrong"}).status_code == 401
 
     def test_rest_adapter_fixes(self):
-        from core.agent_tools import adapt_inputs
+        from apex.agent_tools import adapt_inputs
         h = adapt_inputs("heal_code", {"code": "x=1", "issues": ["a", "b"]})
         assert h == {"files": {"code.txt": "x=1"}, "error": "a\nb"}
         d = adapt_inputs("write_documentation", {"code": "c", "name": "n"})
@@ -360,14 +360,14 @@ def demo_client(monkeypatch, tmp_path):
     pytest.importorskip("httpx")
     from fastapi.testclient import TestClient
 
-    from core.web_security import get_settings
+    from apex.web_security import get_settings
     monkeypatch.setenv("APEX_PUBLIC_DEMO", "1")
     monkeypatch.setenv("APEX_ALLOWED_HOSTS", "localhost,.hf.space")
     monkeypatch.setenv("APEX_ALLOWED_ORIGINS", "https://*.hf.space")
     monkeypatch.setenv("APEX_FRAME_ANCESTORS", "https://huggingface.co")
     monkeypatch.setenv("APEX_RUNS_PER_HOUR", "2")
     get_settings.cache_clear()
-    import server
+    from apex import server
     monkeypatch.setattr(server, "RUNS_DIR", (tmp_path / "runs").resolve())
     monkeypatch.setattr(server, "_rate", server.RateLimiter())
     server.sessions.clear()
@@ -377,7 +377,7 @@ def demo_client(monkeypatch, tmp_path):
 
 class TestPublicDemo:
     def test_refuses_to_start_with_server_keys(self, monkeypatch):
-        from core.web_security import assert_safe_bind, get_settings
+        from apex.web_security import assert_safe_bind, get_settings
         monkeypatch.setenv("APEX_PUBLIC_DEMO", "1")
         monkeypatch.setenv("GROQ_API_KEY", "gsk_owner_key_should_not_be_here")
         get_settings.cache_clear()
@@ -445,12 +445,12 @@ class TestPublicDemo:
         assert any("DEMO REPLAY" in e[2] for e in events)
         done = [e for e in events if e[0] == "System" and e[1] == "done" and e[3] and "usage" in e[3]]
         assert done and done[-1][3]["usage"]["calls"] >= 7
-        from core.ai.provider import _model_override
+        from apex.ai.provider import _model_override
         assert _model_override.get() == ""  # replay model did not leak out of the run
 
     def test_byok_key_scoped_to_run(self, demo_client, monkeypatch):
         server, _ = demo_client
-        from core.ai import provider
+        from apex.ai import provider
         seen = {}
 
         def fake_inner(sid, task, replay=False):
@@ -463,19 +463,17 @@ class TestPublicDemo:
 
 
 class TestOfficeDashboard:
-    def test_office_and_classic_served(self, monkeypatch):
+    def test_office_served(self, monkeypatch):
         pytest.importorskip("httpx")
         from fastapi.testclient import TestClient
 
-        import server
+        from apex import server
         c = TestClient(server.app, base_url="http://localhost:8000")
         office = c.get("/")
         assert office.status_code == 200 and "APEX SOCIETY OFFICE" in office.text
-        classic = c.get("/classic")
-        assert classic.status_code == 200 and "<html" in classic.text.lower()
 
     def test_office_knows_all_nine_agents(self):
-        html = (ROOT / "dashboard.html").read_text(encoding="utf-8")
+        html = (ROOT / "apex" / "web" / "dashboard.html").read_text(encoding="utf-8")
         for name in ("Planner", "Architect", "Coder", "Reviewer", "SelfHealer",
                      "Debugger", "Executor", "DocWriter", "Memory"):
             assert f"id:'{name}'" in html, name

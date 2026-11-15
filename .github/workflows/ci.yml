@@ -75,7 +75,7 @@ jobs:
           HOME: ${{ runner.temp }}/home
         run: |
           mkdir -p "$HOME"
-          python eval/run_eval.py --self-test --limit 3 --run-id ci --out "$RUNNER_TEMP/eval"
+          python -m apex eval --self-test --limit 3 --run-id ci --out "$RUNNER_TEMP/eval"
           cat "$RUNNER_TEMP/eval/ci/summary.md" >> "$GITHUB_STEP_SUMMARY"
 
   docker:
@@ -122,10 +122,13 @@ jobs:
           python - <<'EOF'
           import zipfile, glob, sys
           names = zipfile.ZipFile(glob.glob("dist/*.whl")[0]).namelist()
-          need = ["cli.py", "server.py", "mcp_server.py", "apex_mcp.py", "core/security.py",
-                  "core/orchestrator.py", "core/telemetry.py", "core/execution/sandbox.py", "core/demo_llm.py"]
+          need = ["apex/__init__.py", "apex/api.py", "apex/cli.py", "apex/server.py", "apex/mcp_sdk.py",
+                  "apex/orchestrator.py", "apex/execution/sandbox.py", "apex/evals/tasks.json",
+                  "apex/web/dashboard.html"]
           missing = [n for n in need if n not in names]
-          print("missing:", missing); sys.exit(1 if missing else 0)
+          # the wheel must install exactly one top-level package
+          stray = sorted({n.split("/")[0] for n in names} - {"apex"} - {n.split("/")[0] for n in names if ".dist-info/" in n})
+          print("missing:", missing, "stray top-level:", stray); sys.exit(1 if missing or stray else 0)
           EOF
       - name: Clean-venv install + CLI smoke test
         run: |
@@ -134,5 +137,7 @@ jobs:
           cd /tmp
           /tmp/v/bin/apex --help
           /tmp/v/bin/apex-mcp --help
+          /tmp/v/bin/apex doctor
+          /tmp/v/bin/python -c "import apex; print(apex.__version__); assert callable(apex.generate)"
           HOME=/tmp/h APEX_MEMORY_DIR=/tmp/h/mem /tmp/v/bin/apex generate "smoke test" --name smoke --output /tmp/out --dry-run
           test -f /tmp/out/smoke/README.md

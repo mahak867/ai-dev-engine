@@ -36,7 +36,7 @@ from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
-from core.security import ProcResult, minimal_env, run_argv, to_argv, write_files_contained
+from apex.security import ProcResult, minimal_env, run_argv, to_argv, write_files_contained
 
 DEFAULT_IMAGE = "python:3.12-slim"
 DEPS_DIR = ".apex-deps"

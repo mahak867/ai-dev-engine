@@ -3,10 +3,10 @@ APEX Society — WebSocket Backend
 Streams real-time agent events from the orchestrator to the dashboard.
 
 Run (local, default 127.0.0.1:8000):
-    python server.py
-    # or: uvicorn server:app --host 127.0.0.1 --port 8000
+    apex serve          (or: python -m apex.server)
+    # or: uvicorn apex.server:app --host 127.0.0.1 --port 8000
 
-Exposing beyond localhost requires APEX_API_TOKEN (see core/web_security.py)
+Exposing beyond localhost requires APEX_API_TOKEN (see apex/web_security.py)
 and should sit behind a TLS-terminating reverse proxy.
 """
 from __future__ import annotations
@@ -32,9 +32,9 @@ from fastapi import Body, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from core import web_security
-from core.web_security import RateLimiter, client_ip, get_settings, ws_reject_reason
-from mcp_server import MCP_TOOLS, TOOLS_BY_NAME, MCPToolExecutor, validate_tool_inputs
+from apex import web_security
+from apex.tool_api import MCP_TOOLS, TOOLS_BY_NAME, MCPToolExecutor, validate_tool_inputs
+from apex.web_security import RateLimiter, client_ip, get_settings, ws_reject_reason
 
 log = logging.getLogger("apex.server")
 logging.basicConfig(level=logging.INFO)
@@ -66,8 +66,8 @@ REPLAY_MODEL = "fake/canned"
 
 def _install_replay_llm():
     """Canned outputs for the no-key 'demo replay' — clearly labelled, costs nothing."""
-    from core import demo_llm as fake_llm
-    from core.ai import provider
+    from apex import demo_llm as fake_llm
+    from apex.ai import provider
     delay = float(os.environ.get("APEX_REPLAY_DELAY", "0.8"))
 
     def slow(messages):
@@ -80,7 +80,7 @@ def _llm_context(byok: dict | None):
     """Context manager that scopes a visitor's key / replay model to one run."""
     from contextlib import nullcontext
 
-    from core.ai.provider import api_keys
+    from apex.ai.provider import api_keys
     if not byok:
         return nullcontext()
     if byok.get("mode") == "replay":
@@ -239,9 +239,9 @@ def _run_society(session_id: str, task: str, byok: dict | None = None):
 def _run_society_inner(session_id: str, task: str, replay: bool = False):
     import tempfile
 
-    from core import telemetry
-    from core.memory.store import MemoryStore
-    from core.orchestrator import Orchestrator
+    from apex import telemetry
+    from apex.memory.store import MemoryStore
+    from apex.orchestrator import Orchestrator
 
     t_start = time.time()
     _set_status(session_id, "running")
@@ -284,67 +284,6 @@ def _run_society_inner(session_id: str, task: str, replay: bool = False):
         _set_status(session_id, "error")
 
 
-# ── run benchmark ──────────────────────────────────────────────────────────────
-def _run_benchmark(session_id: str, task: str, byok: dict | None = None):
-    with _llm_context(byok):
-        _run_benchmark_inner(session_id, task)
-
-
-def _run_benchmark_inner(session_id: str, task: str):
-    t_start = time.time()
-    _set_status(session_id, "benchmarking")
-    sync_emit(session_id, "System", "running", "starting benchmark — single vs society")
-    try:
-        from benchmark import run_single_agent, score_output
-        from core.orchestrator import Orchestrator
-
-        base = RUNS_DIR / session_id
-        sync_emit(session_id, "System", "running", "running single agent...")
-        single = run_single_agent(task, str(base / "single"))
-        sync_emit(session_id, "System", "running",
-                  f"single agent done — {single['files_generated']} files, score {single['quality']['score']}")
-
-        sync_emit(session_id, "System", "running", "running agent society...")
-
-        def on_event(agent, status, msg, extra=None):
-            sync_emit(session_id, agent, status, msg, {"elapsed": round(time.time() - t_start, 1), **(extra or {})})
-
-        orch = Orchestrator(model="auto", on_event=on_event)
-        path = orch.generate_fullstack(name=f"bench-society-{session_id[:8]}", request=task, output_dir=str(base))
-
-        files = {}
-        skip = {".git", "node_modules", "__pycache__"}
-        for p in Path(path).rglob("*"):
-            if p.is_file() and not p.is_symlink() and not any(s in p.parts for s in skip):
-                try:
-                    files[str(p.relative_to(path))] = p.read_text(encoding="utf-8")
-                except (OSError, UnicodeDecodeError):
-                    pass
-
-        society_quality = score_output(files, task)
-        sync_emit(session_id, "System", "done", "benchmark complete", {
-            "benchmark": {
-                "single": {
-                    "time": single["elapsed_seconds"],
-                    "files": single["files_generated"],
-                    "score": single["quality"]["score"],
-                    "vulns": len(single["quality"].get("security_vulnerabilities", [])),
-                },
-                "society": {
-                    "time": round(time.time() - t_start, 1),
-                    "files": len(files),
-                    "score": society_quality["score"],
-                    "vulns": len(society_quality.get("security_vulnerabilities", [])),
-                },
-            }
-        })
-        _set_status(session_id, "done", files=len(files))
-    except Exception as e:
-        log.exception("benchmark %s failed", session_id)
-        sync_emit(session_id, "System", "error", f"benchmark error: {type(e).__name__}")
-        _set_status(session_id, "error")
-
-
 # ── WebSocket endpoint ─────────────────────────────────────────────────────────
 async def _ws_send(ws: WebSocket, data: dict):
     await ws.send_text(json.dumps(data))
@@ -375,9 +314,8 @@ async def websocket_endpoint(ws: WebSocket):
                 continue
             action = msg.get("action")
 
-            if action in ("run", "benchmark"):
-                default = ("build a REST API with auth and CRUD" if action == "run"
-                           else "build a REST API with JWT auth and PostgreSQL")
+            if action == "run":
+                default = "build a REST API with auth and CRUD"
                 task = msg.get("task", default)
                 if not isinstance(task, str) or not task.strip():
                     await _ws_send(ws, {"type": "error", "msg": "Task cannot be empty"})
@@ -388,18 +326,14 @@ async def websocket_endpoint(ws: WebSocket):
                 if err:
                     await _ws_send(ws, {"type": "error", "msg": err})
                     continue
-                if action == "benchmark" and byok and byok.get("mode") == "replay":
-                    await _ws_send(ws, {"type": "error", "msg": "Benchmark needs a real API key."})
-                    continue
                 if settings.public_demo and not (byok and byok.get("mode") == "replay") and \
                         not _rate.allow(client_ip(ws, settings), settings.runs_per_hour):
                     await _ws_send(ws, {"type": "error",
                                         "msg": f"Rate limit: {settings.runs_per_hour} runs per hour. Try later."})
                     continue
-                session_id = _new_session(task, action)
+                session_id = _new_session(task, "run")
                 manager.subscribe(session_id, ws)
-                target = _run_society if action == "run" else _run_benchmark
-                if not _start_job(target, session_id, task, byok):
+                if not _start_job(_run_society, session_id, task, byok):
                     _set_status(session_id, "rejected")
                     await _ws_send(ws, {"type": "error", "session_id": session_id,
                                         "msg": "Server busy — too many jobs running. Try again shortly."})
@@ -508,44 +442,25 @@ async def memory_stats():
     """Past-run stats for the dashboard Memory tab."""
     if get_settings().public_demo:
         return {"stats": {"total_runs": 0}, "projects": [], "note": "memory is per-run in the public demo"}
-    from core.memory.store import MemoryStore
+    from apex.memory.store import MemoryStore
     store = MemoryStore()
     return {"stats": store.get_stats(), "projects": store.list_projects()[:20]}
 
 
 @app.get("/api/society/stats")
 async def society_stats():
-    """
-    Aggregate stats across recorded runs. ``single_agent_baseline`` is the
-    static result of the recorded hackathon benchmark (one task, n=1), not a
-    live measurement — it is labelled as such.
-    """
-    from core.memory.store import MemoryStore
+    """Aggregate stats across recorded runs (Reviewer scores are LLM self-assessment)."""
+    from apex.memory.store import MemoryStore
     projects = [] if get_settings().public_demo else MemoryStore().list_projects()
     total_files = sum(p.get("file_count", 0) for p in projects)
     scores = [p["quality_score"] for p in projects if p.get("quality_score", 0) > 0]
-    avg = round(sum(scores) / len(scores)) if scores else 0
-    baseline = {"avg_files": 5, "avg_quality_score": 91, "cves_shipped": 1,
-                "source": "static: recorded hackathon benchmark, single task, n=1"}
-    return {
-        "society": {
-            "total_runs": len(projects),
-            "total_files_generated": total_files,
-            "avg_quality_score": avg,
-            "best_quality_score": max(scores) if scores else 0,
-            "agents": len(AGENTS),
-            "llm_agents": len(LLM_AGENTS),
-            "tool_agents": len(TOOL_AGENTS),
-            "conflict_resolution_rounds_max": 3,
-        },
-        "single_agent_baseline": baseline,
-        "improvement": {
-            "files_per_run": round(total_files / len(projects), 1) if projects else None,
-            "quality_delta_vs_baseline": (avg - baseline["avg_quality_score"]) if scores else None,
-            "note": "Quality scores come from the Reviewer agent (LLM self-assessment), "
-                    "not an independent security scan.",
-        },
-    }
+    return {"society": {
+        "total_runs": len(projects),
+        "total_files_generated": total_files,
+        "avg_quality_score": round(sum(scores) / len(scores)) if scores else 0,
+        "best_quality_score": max(scores) if scores else 0,
+        "agents": len(AGENTS), "llm_agents": len(LLM_AGENTS), "tool_agents": len(TOOL_AGENTS),
+    }}
 
 
 @app.get("/api/sessions")
@@ -598,7 +513,7 @@ async def mcp_call_tool(tool_name: str, inputs: dict = Body(...)):
     err = validate_tool_inputs(tool_name, inputs)
     if err:
         return JSONResponse({"error": err, "available": list(TOOLS_BY_NAME)}, status_code=400)
-    if get_settings().public_demo and tool_name != "run_benchmark":
+    if get_settings().public_demo:
         return _demo_forbidden()
     if not _job_slots.acquire(blocking=False):
         return JSONResponse({"error": "busy — too many concurrent jobs"}, status_code=429)
@@ -614,7 +529,7 @@ async def mcp_health():
 
 
 # ── serve frontend ─────────────────────────────────────────────────────────────
-_DASHBOARD = Path(__file__).resolve().parent / "dashboard.html"
+_DASHBOARD = Path(__file__).resolve().parent / "web" / "dashboard.html"
 
 
 @app.get("/")
@@ -624,21 +539,15 @@ async def serve_dashboard():
     return {"message": "APEX Society API — dashboard.html not found"}
 
 
-_CLASSIC = Path(__file__).resolve().parent / "dashboard-classic.html"
-
-
-@app.get("/classic")
-async def serve_classic():
-    """The original node-graph dashboard."""
-    if _CLASSIC.exists():
-        return FileResponse(_CLASSIC)
-    return _not_found()
-
-
-if __name__ == "__main__":
+def main() -> None:
     import uvicorn
 
     s = get_settings()
     web_security.assert_safe_bind(s.host, s)
-    uvicorn.run("server:app", host=s.host, port=s.port,
+    print(f"APEX Society office: http://{'localhost' if s.host in ('127.0.0.1', '0.0.0.0') else s.host}:{s.port}")
+    uvicorn.run("apex.server:app", host=s.host, port=s.port,
                 reload=os.environ.get("APEX_DEV_RELOAD") == "1", proxy_headers=False)
+
+
+if __name__ == "__main__":
+    main()

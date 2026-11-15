@@ -3,15 +3,15 @@
 APEX eval harness — single agent vs the 9-agent society, scored independently.
 
     # real run (needs a provider key; pin one model so both modes are comparable)
-    APEX_MODEL=groq/llama-3.3-70b GROQ_API_KEY=... python eval/run_eval.py --limit 30
+    APEX_MODEL=groq/llama-3.3-70b GROQ_API_KEY=... apex eval --limit 30
 
     # add the Docker sandbox (install + import + pytest, network off)
-    APEX_SANDBOX=docker python eval/run_eval.py --sandbox
+    APEX_SANDBOX=docker apex eval --sandbox
 
     # prove the pipeline works with no key / no network (canned outputs)
-    python eval/run_eval.py --self-test --limit 3
+    apex eval --self-test --limit 3
 
-Results go to eval/results/<run-id>/: results.jsonl (one row per task×mode,
+Results go to eval-results/<run-id>/: results.jsonl (one row per task×mode,
 appended as it goes — re-running the same --run-id resumes), summary.json and
 summary.md (means, paired differences with bootstrap 95% CIs, win/tie/loss).
 
@@ -19,7 +19,7 @@ Fairness rules baked in:
   * both modes get the identical task text and the same pinned model
   * the society gets a fresh, empty MemoryStore per task (no learning leakage
     between tasks unless --with-memory)
-  * scoring never asks an LLM (see eval/scoring.py)
+  * scoring never asks an LLM (see apex/evals/scoring.py)
 """
 from __future__ import annotations
 
@@ -29,18 +29,17 @@ import os
 import platform
 import random
 import statistics
-import sys
 import tempfile
 import time
 import traceback
 from pathlib import Path
+from typing import Any
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+from apex import telemetry
+from apex.evals.scoring import score_project, tool_versions
+from apex.security import write_files_contained
 
-from core import telemetry  # noqa: E402
-from core.security import write_files_contained  # noqa: E402
-from eval.scoring import score_project, tool_versions  # noqa: E402
+HERE = Path(__file__).resolve().parent
 
 SINGLE_SYSTEM = (
     "You are a senior software engineer. Generate a complete, production-ready codebase for "
@@ -71,7 +70,9 @@ METRICS = [
 
 # ── generation ────────────────────────────────────────────────────────────────
 def parse_single(raw: str) -> dict[str, str]:
-    files, cur, buf = {}, None, []
+    files: dict[str, str] = {}
+    cur: str | None = None
+    buf: list[str] = []
     for line in raw.split("\n"):
         s = line.strip()
         if s.startswith("=== ") and s.endswith(" ==="):
@@ -83,13 +84,13 @@ def parse_single(raw: str) -> dict[str, str]:
     if cur:
         files[cur] = "\n".join(buf).strip("\n") + "\n"
     if not files:  # model ignored the format — fall back to the agents' fenced-block parser
-        from core.agents.base import Agent
+        from apex.agents.base import Agent
         files = Agent.__new__(Agent)._parse_files(raw)
     return files
 
 
 def run_single(task: str, out: Path) -> dict:
-    from core.ai.provider import LLMProvider
+    from apex.ai.provider import LLMProvider
     llm = LLMProvider("coding")
     with telemetry.agent_scope("SingleAgent"):
         raw = llm.complete([{"role": "system", "content": SINGLE_SYSTEM},
@@ -101,8 +102,8 @@ def run_single(task: str, out: Path) -> dict:
 
 
 def run_society(task: str, out: Path, *, with_memory: bool, mem_dir: Path) -> dict:
-    from core.memory.store import MemoryStore
-    from core.orchestrator import Orchestrator
+    from apex.memory.store import MemoryStore
+    from apex.orchestrator import Orchestrator
     store = MemoryStore(str(mem_dir)) if with_memory else MemoryStore(tempfile.mkdtemp(prefix="apex-eval-mem-"))
     orch = Orchestrator(model="auto", on_event=lambda *a, **k: None, memory_store=store)
     path = orch.generate_fullstack(name=out.name, request=task, output_dir=str(out.parent))
@@ -137,9 +138,9 @@ def summarize(rows: list[dict], meta: dict) -> dict:
     for r in rows:
         by_task.setdefault(r["task_id"], {})[r["mode"]] = r
     modes = sorted({r["mode"] for r in rows})
-    out = {"meta": meta, "n_tasks": len(by_task), "modes": modes, "metrics": {}}
+    out: dict[str, Any] = {"meta": meta, "n_tasks": len(by_task), "modes": modes, "metrics": {}}
     for key, label, higher in METRICS:
-        m = {"label": label, "higher_is_better": higher}
+        m: dict[str, Any] = {"label": label, "higher_is_better": higher}
         for mode in modes:
             vals = [v for v in (_get(t[mode], key) for t in by_task.values() if mode in t) if v is not None]
             m[mode] = {"n": len(vals),
@@ -223,13 +224,13 @@ def render_md(s: dict) -> str:
 
 # ── main ──────────────────────────────────────────────────────────────────────
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--tasks", default=str(ROOT / "eval" / "tasks.json"))
+    ap = argparse.ArgumentParser(prog="apex eval", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--tasks", default=str(HERE / "tasks.json"))
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--only", default="", help="comma-separated task ids")
     ap.add_argument("--modes", default="single,society")
     ap.add_argument("--run-id", default=time.strftime("%Y%m%d-%H%M%S"))
-    ap.add_argument("--out", default=str(ROOT / "eval" / "results"))
+    ap.add_argument("--out", default="eval-results")
     ap.add_argument("--sandbox", action="store_true", help="score with the Docker sandbox (install/import/pytest)")
     ap.add_argument("--with-memory", action="store_true", help="let the society learn across tasks")
     ap.add_argument("--self-test", action="store_true", help="fake LLM, no key/network needed")
@@ -237,8 +238,8 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     if args.self_test:
-        from core.ai import provider
-        from eval import fake_llm
+        from apex import demo_llm as fake_llm
+        from apex.ai import provider
         provider.set_fake_responder(fake_llm.respond)
         os.environ["APEX_MODEL"] = "fake/canned"
 

@@ -8,21 +8,21 @@
                        │ HTTP / WebSocket
                        ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              LIVE OFFICE (dashboard.html)                    │
+│              LIVE OFFICE (apex/web)                          │
 │   SVG force graph · animateMotion dots · ghost characters    │
 │   Real-time log · Benchmark view · Security panel           │
 └──────────────────────┬──────────────────────────────────────┘
                        │ WebSocket ws://localhost:8000/ws
                        ▼
 ┌─────────────────────────────────────────────────────────────┐
-│            FASTAPI WEBSOCKET SERVER (server.py)              │
+│            FASTAPI WEBSOCKET SERVER (apex/server)            │
 │   Session management · Event broadcasting · REST API        │
 │   /ws · /api/health · /api/sessions · /api/sessions/{id}   │
 └──────────────────────┬──────────────────────────────────────┘
                        │ Python function calls
                        ▼
 ┌─────────────────────────────────────────────────────────────┐
-│          APEX ORCHESTRATOR (core/orchestrator.py)            │
+│          APEX ORCHESTRATOR (apex/orchestrator.py)            │
 │   Coordinates 9 agents · Routes context · Emits events     │
 └──┬───────────────────────────────────────────────────────┬──┘
    │                                                       │
@@ -30,7 +30,7 @@
    ▼                                                       ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                    7 SPECIALIZED AGENTS                       │
-│                  (core/agents/base.py)                        │
+│                  (apex/agents/base.py)                        │
 │                                                               │
 │  🗺 Planner    → JSON plan (stack, files, routes, schema)     │
 │       ↓                                                       │

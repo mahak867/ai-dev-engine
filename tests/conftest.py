@@ -28,7 +28,7 @@ def _hermetic_env(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("APEX_MEMORY_DIR", str(home / ".apex" / "memory"))
     for var in _SECRET_VARS:
         monkeypatch.delenv(var, raising=False)
-    from core.web_security import get_settings
+    from apex.web_security import get_settings
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()

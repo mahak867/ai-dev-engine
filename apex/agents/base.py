@@ -2,8 +2,8 @@
 APEX v3 — Multi-Agent System (9 agents)
 
 LLM agents (this module): Planner, Architect, Coder, Reviewer, SelfHealer,
-Debugger, DocWriter. Tool agents: Executor (core/execution — sandboxed build &
-test) and Memory (core/memory — cross-run learning).
+Debugger, DocWriter. Tool agents: Executor (apex/execution — sandboxed build &
+test) and Memory (apex/memory — cross-run learning).
 """
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 
-from core import telemetry
-from core.ai.provider import LLMProvider
+from apex import telemetry
+from apex.ai.provider import LLMProvider
 
 log = logging.getLogger("apex.agents")
 

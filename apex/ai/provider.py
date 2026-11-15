@@ -16,7 +16,7 @@ from typing import Any
 
 import requests
 
-from core import telemetry
+from apex import telemetry
 
 log = logging.getLogger("apex.provider")
 
@@ -183,7 +183,8 @@ class LLMProvider:
                 time.time() - t0, estimated=estimated,
             )
             return out
-        raise RuntimeError("All providers exhausted — set QWEN_API_KEY, GROQ_API_KEY or OLLAMA_HOST.")
+        raise RuntimeError("All providers exhausted — set GROQ_API_KEY, QWEN_API_KEY or OLLAMA_HOST, "
+                           "or pin one with APEX_MODEL (e.g. openai/gpt-4o-mini with OPENAI_API_KEY).")
 
     def stream(self, messages: list[dict], max_tokens: int = 8192) -> Iterator[str]:
         for model in self._resolve_cascade():
@@ -218,6 +219,11 @@ class LLMProvider:
 
     # ── Internal dispatch ──────────────────────────────────────────────────────
     def _call(self, model: str, messages: list, max_tokens: int, stream: bool):
+        if model.startswith("openai/"):
+            return self._openai(model, messages, max_tokens, stream)
+        if model not in MODELS:
+            raise ValueError(f"unknown model {model!r} — run `apex models`, or use openai/<model-id> "
+                             f"with OPENAI_BASE_URL for any OpenAI-compatible endpoint")
         provider = MODELS[model]["provider"]
         return {
             "qwen":       self._qwen,
@@ -228,6 +234,20 @@ class LLMProvider:
             "mistral":    self._mistral,
             "fake":       self._fake,
         }[provider](model, messages, max_tokens, stream)
+
+    # ── Any OpenAI-compatible endpoint: openai/<model-id> ──────────────────────
+    def _openai(self, model, messages, max_tokens, stream):
+        """
+        OpenAI itself, or anything that speaks its API: LM Studio, vLLM, llama.cpp
+        server, LiteLLM, Azure-style gateways. Set OPENAI_BASE_URL (default
+        https://api.openai.com/v1) and OPENAI_API_KEY (optional for local servers).
+        """
+        base = (os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
+        key = _key("OPENAI_API_KEY")
+        if not key and "api.openai.com" in base:
+            raise RuntimeError("OPENAI_API_KEY not set")
+        return self._openai_compat(f"{base}/chat/completions", key or "none",
+                                   model.split("/", 1)[1], messages, max_tokens, stream)
 
     def _fake(self, model, messages, max_tokens, stream):
         if _fake_responder is None:

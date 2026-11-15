@@ -1,0 +1,18 @@
+# One-command local setup: the office dashboard on http://localhost:8000
+#   GROQ_API_KEY=gsk_... docker compose up
+services:
+  apex:
+    build: .
+    ports:
+      - "127.0.0.1:8000:7860"
+    environment:
+      APEX_PUBLIC_DEMO: "0"          # private use: your keys below are used for runs
+      APEX_API_TOKEN: "${APEX_API_TOKEN:-local-dev-token}"   # open http://localhost:8000/#token=local-dev-token
+      APEX_ALLOWED_HOSTS: "localhost,127.0.0.1"
+      APEX_ALLOWED_ORIGINS: "http://localhost:8000,http://127.0.0.1:8000"
+      APEX_FRAME_ANCESTORS: ""
+      GROQ_API_KEY: "${GROQ_API_KEY:-}"
+      QWEN_API_KEY: "${QWEN_API_KEY:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENAI_BASE_URL: "${OPENAI_BASE_URL:-}"
+      APEX_MODEL: "${APEX_MODEL:-}"

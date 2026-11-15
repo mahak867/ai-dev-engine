@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 SKIP_DIRS = {"node_modules", ".git", "__pycache__", ".venv", "venv", ".apex-deps"}
 
@@ -63,7 +64,7 @@ def _run_json(argv: list[str], cwd: Path) -> object | None:
 
 def tool_versions() -> dict:
     from importlib import metadata
-    v = {}
+    v: dict[str, str | None] = {}
     for name in ("ruff", "bandit"):
         try:
             v[name] = metadata.version(name)
@@ -81,7 +82,7 @@ def ruff_counts(root: Path) -> dict:
                 "ruff_security": 0, "ruff_codes": {}}
     codes: dict[str, int] = {}
     sec = 0
-    for item in data:
+    for item in (data if isinstance(data, list) else []):
         path = Path(item.get("filename", ""))
         code = item.get("code") or "?"
         # S101 (assert) is expected in tests; don't penalise test files for it.
@@ -147,7 +148,7 @@ def score_project(root: str | Path, *, sandbox: bool = False) -> dict:
         except SyntaxError:
             syntax_bad += 1
     tests = [p for p in py if _is_test(p)]
-    out = {
+    out: dict[str, Any] = {
         "generated": len(files) > 0,
         "files": len(files),
         "py_files": len(py),
@@ -162,7 +163,7 @@ def score_project(root: str | Path, *, sandbox: bool = False) -> dict:
     out.update(ruff_counts(root))
     out.update(bandit_counts(root))
     if sandbox:
-        from core.execution.sandbox import DockerSandbox
+        from apex.execution.sandbox import DockerSandbox
         rep = DockerSandbox().smoke_test(root)
         out["sandbox"] = {
             "ran": rep.ran, "ok": rep.ok, "reason": rep.reason,

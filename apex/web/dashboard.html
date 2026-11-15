@@ -86,7 +86,6 @@ table.ut th{color:var(--sub)}
   <input id="kkey" type="password" autocomplete="off" spellcheck="false" placeholder="Your API key (used for this run only)">
   <label class="chk" title="Canned agent outputs through the real pipeline, no key needed"><input type="checkbox" id="kreplay"> demo replay</label>
   <button id="dlBtn" style="display:none">Download ZIP</button>
-  <a class="link" href="/classic">classic view</a>
 </div>
 
 <div class="stage"><div class="wrap"><canvas id="world" aria-label="Isometric office with nine agents"></canvas>
@@ -811,7 +810,7 @@ function onAgentEvent(m){
 function handleMsg(m){
   if(m.type==='error'){feed('System',m.msg||'error');setStatus('ERROR');office.running=false;$('runBtn').disabled=false;return}
   if(m.type==='session_created'){office.session=m.session_id;office.demo=false;startRun();return}
-  if(m.type==='agent_event'){if(m.benchmark)feed('System',`benchmark: single ${m.benchmark.single.score} vs society ${m.benchmark.society.score}`);onAgentEvent(m)}
+  if(m.type==='agent_event')onAgentEvent(m)
 }
 
 // ── connection ────────────────────────────────────────────────────────────────

@@ -4,13 +4,13 @@ import sys
 
 import pytest
 
-from core import demo_llm
+from apex import demo_llm
 
 
 @pytest.fixture
 def scripted_llm(monkeypatch):
     """Install a fake LLM whose Reviewer verdicts are scripted per round."""
-    from core.ai import provider
+    from apex.ai import provider
     state = {"reviews": [], "calls": [], "fail": set()}
 
     def respond(messages):
@@ -32,8 +32,8 @@ def scripted_llm(monkeypatch):
 
 
 def _orch(tmp_path, events=None, dialogue=None):
-    from core.memory.store import MemoryStore
-    from core.orchestrator import Orchestrator
+    from apex.memory.store import MemoryStore
+    from apex.orchestrator import Orchestrator
     return Orchestrator(
         on_event=lambda a, s, m, extra=None: events.append((a, s, m)) if events is not None else None,
         on_dialogue=(lambda f, t, k, c: dialogue.append((f, t, k))) if dialogue is not None else None,
@@ -104,12 +104,12 @@ class TestFailureTolerance:
 
 class TestSyntaxCheck:
     def test_python(self):
-        from core.syntax_check import check_syntax
+        from apex.syntax_check import check_syntax
         r = check_syntax({"ok.py": "x = 1\n", "bad.py": "def (:\n", "notes.txt": "ignored"})
         assert (r.total, r.passed, r.ok) == (2, 1, False) and r.failed[0].startswith("bad.py")
 
     def test_js_falls_back_without_node(self, monkeypatch):
-        from core import syntax_check
+        from apex import syntax_check
 
         def no_node(*a, **k):
             raise FileNotFoundError("node")
@@ -118,13 +118,13 @@ class TestSyntaxCheck:
         assert not r.node_available and r.passed == 1 and "unbalanced" in r.failed[0]
 
     def test_empty(self):
-        from core.syntax_check import check_syntax
+        from apex.syntax_check import check_syntax
         assert check_syntax({"README.md": "# hi"}).total == 0
 
 
 class TestCli:
     def _run(self, monkeypatch, capsys, *argv):
-        import cli
+        from apex import cli
         monkeypatch.setattr(sys, "argv", ["apex", *argv])
         cli.main()
         return capsys.readouterr().out
@@ -137,3 +137,105 @@ class TestCli:
 
     def test_models(self, monkeypatch, capsys):
         assert "groq/" in self._run(monkeypatch, capsys, "models")
+
+
+class TestPublicApi:
+    def test_generate_returns_result(self, scripted_llm, tmp_path):
+        import apex
+        events = []
+        r = apex.generate("todo api", name="todo", output_dir=tmp_path, model="fake/canned",
+                          memory_dir=tmp_path / "mem", on_event=lambda a, s, m, extra=None: events.append(a))
+        assert isinstance(r, apex.GenerationResult)
+        assert r.path.endswith("todo") and "backend/app.py" in r.files
+        assert r.quality_score == 92 and r.review_rounds == 1
+        assert r.sandbox is None and r.passed_sandbox is None
+        assert r.usage["calls"] >= 7 and "Coder" in r.usage["by_agent"]
+        assert "Planner" in events and (tmp_path / "mem").is_dir()
+
+    def test_review_can_be_skipped(self, scripted_llm, tmp_path):
+        import apex
+        r = apex.generate("x", output_dir=tmp_path, model="fake/canned", review=False, memory_dir=tmp_path / "m")
+        assert r.quality_score is None and r.review_rounds == 0
+
+    def test_model_pin_does_not_leak(self, scripted_llm, tmp_path, monkeypatch):
+        import apex
+        from apex.ai.provider import _model_override
+        monkeypatch.delenv("APEX_MODEL")
+        apex.generate("x", output_dir=tmp_path, model="fake/canned", memory_dir=tmp_path / "m")
+        assert _model_override.get() == ""
+
+    def test_sandbox_flag_overrides_env(self, scripted_llm, tmp_path, monkeypatch):
+        from apex import orchestrator
+        from apex.memory.store import MemoryStore
+        called = []
+        monkeypatch.setattr(orchestrator.Orchestrator, "_sandbox_loop", lambda self, files: called.append(1) or files)
+        monkeypatch.setattr(orchestrator, "sandbox_enabled", lambda: True)
+        mk = lambda sb: orchestrator.Orchestrator(on_event=lambda *a, **k: None, sandbox=sb,  # noqa: E731
+                                                  memory_store=MemoryStore(str(tmp_path / "m")))
+        mk(False).generate_fullstack("a", "x", str(tmp_path))
+        assert called == []
+        mk(None).generate_fullstack("b", "x", str(tmp_path))
+        assert called == [1]
+
+
+class TestOpenAICompatible:
+    def _provider(self, monkeypatch, seen):
+        from apex.ai.provider import LLMProvider
+
+        class Resp:
+            status_code = 200
+            def raise_for_status(self): pass
+            def json(self): return {"choices": [{"message": {"content": "hi"}}],
+                                    "usage": {"prompt_tokens": 3, "completion_tokens": 1}}
+
+        p = LLMProvider("openai/my-local-model")
+
+        def post(url, json=None, headers=None, **kw):
+            seen.update(url=url, model=json["model"], auth=headers["Authorization"])
+            return Resp()
+        monkeypatch.setattr(p._session, "post", post)
+        monkeypatch.delenv("APEX_MODEL", raising=False)
+        return p
+
+    def test_custom_base_url_without_key(self, monkeypatch):
+        seen = {}
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:1234/v1/")
+        assert self._provider(monkeypatch, seen).complete([{"role": "user", "content": "x"}]) == "hi"
+        assert seen == {"url": "http://localhost:1234/v1/chat/completions", "model": "my-local-model",
+                        "auth": "Bearer none"}
+
+    def test_openai_requires_key(self, monkeypatch):
+        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+        with pytest.raises(RuntimeError):
+            self._provider(monkeypatch, {}).complete([{"role": "user", "content": "x"}])
+
+    def test_unknown_model_is_a_clear_error(self, monkeypatch):
+        from apex.ai.provider import LLMProvider
+        with pytest.raises(ValueError, match="apex models"):
+            LLMProvider("nope/x")._call("nope/x", [], 10, False)
+
+
+class TestCliExtras:
+    def test_doctor(self, monkeypatch, capsys):
+        from apex import cli
+        monkeypatch.setenv("GROQ_API_KEY", "gsk_x")
+        rows = {label: (ok, detail) for label, ok, detail in cli.doctor_report()}
+        assert rows["LLM provider"][0] and "Groq" in rows["LLM provider"][1]
+        assert "Docker sandbox" in rows and "MCP server" in rows
+        monkeypatch.setattr(sys, "argv", ["apex", "doctor"])
+        cli.main()
+        assert "APEX doctor" in capsys.readouterr().out
+
+    def test_eval_subcommand(self, monkeypatch, tmp_path):
+        pytest.importorskip("bandit")
+        from apex import cli
+        monkeypatch.setattr(sys, "argv", ["apex", "eval", "--self-test", "--limit", "1",
+                                          "--run-id", "t", "--out", str(tmp_path)])
+        with pytest.raises(SystemExit) as e:
+            cli.main()
+        assert e.value.code == 0 and (tmp_path / "t" / "summary.md").is_file()
+
+    def test_python_dash_m(self, tmp_path):
+        import subprocess
+        r = subprocess.run([sys.executable, "-m", "apex", "--help"], capture_output=True, text=True, timeout=60)
+        assert r.returncode == 0 and "serve" in r.stdout and "doctor" in r.stdout

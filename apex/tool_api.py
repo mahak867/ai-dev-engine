@@ -1,19 +1,19 @@
 """
 APEX Society — MCP Server
 =========================
-Exposes the society's 7 LLM agents (+ a static benchmark summary) as 8 typed tools over
+Exposes the society's 7 LLM agents as typed tools over
 HTTP instead of raw shell commands. Tools only return text; none of them write
 files or run processes.
 
 Note: this is a simple JSON-over-HTTP tool API kept for the dashboard and curl.
-The spec-compliant MCP server (official SDK, stdio + Streamable HTTP) is apex_mcp.py. It applies the spec's
+The spec-compliant MCP server (official SDK, stdio + Streamable HTTP) is apex/mcp_sdk.py. It applies the spec's
 transport security guidance anyway: loopback bind by default, Host/Origin
-validation against DNS rebinding, and bearer-token auth (core/web_security.py).
+validation against DNS rebinding, and bearer-token auth (apex/web_security.py).
 
 This directly addresses the hackathon judging criterion:
 "Does the project make sophisticated use of QwenCloud APIs (e.g., custom skills, MCP integrations)?"
 
-Run standalone: python mcp_server.py   (binds 127.0.0.1:8001 by default)
+Run standalone: python -m apex.tool_api   (binds 127.0.0.1:8001 by default)
 Or import in server.py for integrated use.
 """
 from __future__ import annotations
@@ -35,7 +35,7 @@ log = logging.getLogger("apex.mcp")
 # Each tool is a typed function exposed to the LLM
 # The LLM cannot run arbitrary shell commands — only these typed tools
 
-MCP_TOOLS = [
+MCP_TOOLS: list[dict[str, Any]] = [
     {
         "name": "plan_project",
         "description": "Analyze a project request and create a structured JSON plan with tech stack, files, API routes, and DB schema.",
@@ -123,22 +123,11 @@ MCP_TOOLS = [
             "required": ["code", "name"]
         }
     },
-    {
-        "name": "run_benchmark",
-        "description": "Run a comparison benchmark between single-agent and Agent Society on a given task.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "task": {"type": "string", "description": "Task to benchmark"},
-            },
-            "required": ["task"]
-        }
-    },
 ]
 
 TOOLS_BY_NAME = {t["name"]: t for t in MCP_TOOLS}
 MAX_TOOL_INPUT_CHARS = int(os.environ.get("APEX_MAX_TOOL_INPUT_CHARS", "20000"))
-_JSON_TYPES = {"string": str, "object": dict, "array": list, "number": (int, float), "boolean": bool}
+_JSON_TYPES: dict[str, Any] = {"string": str, "object": dict, "array": list, "number": (int, float), "boolean": bool}
 
 
 def validate_tool_inputs(tool_name: str, inputs: Any) -> str | None:
@@ -168,7 +157,7 @@ def validate_tool_inputs(tool_name: str, inputs: Any) -> str | None:
 class MCPToolExecutor:
     """
     Executes typed tool calls by routing to the appropriate agent.
-    Only the 8 tools in MCP_TOOLS are reachable; inputs are schema-checked and
+    Only the tools in MCP_TOOLS are reachable; inputs are schema-checked and
     size-capped. Agents return text only — no file writes, no shell.
     """
 
@@ -183,7 +172,7 @@ class MCPToolExecutor:
             return cls._shared
 
     def __init__(self):
-        from core.agents.base import (
+        from apex.agents.base import (
             ArchitectAgent,
             CoderAgent,
             DebuggerAgent,
@@ -192,7 +181,7 @@ class MCPToolExecutor:
             ReviewerAgent,
             SelfHealerAgent,
         )
-        from core.ai.provider import LLMProvider
+        from apex.ai.provider import LLMProvider
         llm = LLMProvider("auto")
         coding_llm = LLMProvider("coding")
         self.agents = {
@@ -214,10 +203,8 @@ class MCPToolExecutor:
         log.info(f"MCP tool call: {tool_name}({list(inputs.keys())})")
 
         try:
-            if tool_name == "run_benchmark":
-                return self._run_benchmark(inputs.get("task", "build a REST API"))
 
-            from core.agent_tools import adapt_inputs
+            from apex.agent_tools import adapt_inputs
             agent = self.agents[tool_name]
             result = agent.run(adapt_inputs(tool_name, inputs))
 
@@ -235,30 +222,13 @@ class MCPToolExecutor:
             return {"error": f"{type(e).__name__}: tool failed", "tool": tool_name,
                     "duration_seconds": round(time.time()-t0,2)}
 
-    def _run_benchmark(self, task: str) -> dict:
-        """Static summary of the recorded hackathon benchmark — does not run anything."""
-        return {
-            "tool": "run_benchmark",
-            "task": task[:200],
-            "result": "Static numbers from the recorded hackathon benchmark run (single task, n=1). "
-                      "Run `python benchmark.py` to reproduce.",
-            "static": True,
-            "quick_stats": {
-                "single_agent": {"quality": 91, "files": 5, "cves": 1},
-                "agent_society": {"quality": 100, "files": 11, "cves": 0},
-            }
-        }
-
-
-# ── MCP HTTP Server ────────────────────────────────────────────────────────────
-# Exposes tools as HTTP endpoints for integration with any MCP-compatible client
 
 def create_mcp_app():
     from fastapi import Body, FastAPI
     from fastapi.concurrency import run_in_threadpool
     from fastapi.responses import JSONResponse
 
-    from core import web_security
+    from apex import web_security
 
     app = FastAPI(title="APEX Society Tool Server", version="1.1.0")
     web_security.install(app)
@@ -305,7 +275,7 @@ def create_mcp_app():
 if __name__ == "__main__":
     import uvicorn
 
-    from core.web_security import assert_safe_bind
+    from apex.web_security import assert_safe_bind
     host = os.environ.get("APEX_HOST", "127.0.0.1")
     port = int(os.environ.get("APEX_MCP_PORT", "8001"))
     assert_safe_bind(host)

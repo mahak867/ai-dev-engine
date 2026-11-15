@@ -80,7 +80,7 @@ def cmd_generate(args: argparse.Namespace):
         _stream_generate(args)
         return
 
-    from core.orchestrator import Orchestrator
+    from apex.orchestrator import Orchestrator
     orch = Orchestrator(model=args.model, dry_run=args.dry_run, on_event=_event)
 
     t0   = time.time()
@@ -97,7 +97,7 @@ def cmd_generate(args: argparse.Namespace):
 
 
 def _stream_generate(args: argparse.Namespace):
-    from core.orchestrator import Orchestrator
+    from apex.orchestrator import Orchestrator
     orch = Orchestrator(model=args.model, dry_run=args.dry_run)
     print(f"  {muted('─'*50)}\n")
     for token in orch.generate_stream(args.name, args.request):
@@ -108,7 +108,7 @@ def _stream_generate(args: argparse.Namespace):
 # ── subcommand: edit ───────────────────────────────────────────────────────────
 def cmd_edit(args: argparse.Namespace):
     print(BANNER)
-    from core.orchestrator import Orchestrator
+    from apex.orchestrator import Orchestrator
     orch = Orchestrator(model=args.model, on_event=_event)
     if args.edit:
         changed = orch.edit_app(args.path, args.edit)
@@ -123,7 +123,7 @@ def cmd_edit(args: argparse.Namespace):
 
 # ── subcommand: list ───────────────────────────────────────────────────────────
 def cmd_list(args: argparse.Namespace):
-    from core.memory.store import MemoryStore
+    from apex.memory.store import MemoryStore
     store = MemoryStore()
     projects = store.list_projects()
     if not projects:
@@ -140,7 +140,7 @@ def cmd_list(args: argparse.Namespace):
 
 # ── subcommand: models ─────────────────────────────────────────────────────────
 def cmd_models(args: argparse.Namespace):
-    from core.ai.provider import MODELS
+    from apex.ai.provider import MODELS
     print(f"\n  {bold('Available Models:')}\n")
     by_provider: dict[str, list] = {}
     for m, info in MODELS.items():
@@ -172,8 +172,8 @@ def cmd_audit(args: argparse.Namespace):
 
     print(f"  Found {amber(str(len(files)))} files to audit...\n")
 
-    from core.agents.base import ReviewerAgent
-    from core.ai.provider import LLMProvider
+    from apex.agents.base import ReviewerAgent
+    from apex.ai.provider import LLMProvider
     agent = ReviewerAgent(LLMProvider("coding"))
 
     sample = "\n\n".join(
@@ -199,11 +199,62 @@ def cmd_audit(args: argparse.Namespace):
     print()
 
 
+def _lazy(module: str, extra: str):
+    """Import an optional component, with a clear hint when its extra is missing."""
+    import importlib
+    try:
+        return importlib.import_module(module)
+    except ImportError as e:
+        print(f"  {red('Missing dependency:')} {e.name}. Install it with: pip install \"apex-ai-dev-engine[{extra}]\"")
+        sys.exit(1)
+
+
+def cmd_serve(args: argparse.Namespace):
+    if args.host:
+        os.environ["APEX_HOST"] = args.host
+    if args.port:
+        os.environ["APEX_PORT"] = str(args.port)
+    server = _lazy("apex.server", "server")
+    server.main()
+
+
+def doctor_report() -> list[tuple[str, bool, str]]:
+    """(check, ok, detail) rows describing what this install can do."""
+    import importlib.util
+    import shutil
+
+    from apex.execution.sandbox import docker_available
+    rows = []
+    keys = {"Groq": "GROQ_API_KEY", "Qwen": "QWEN_API_KEY", "OpenRouter": "OPENROUTER_API_KEY",
+            "OpenAI-compatible": "OPENAI_API_KEY"}
+    found = [n for n, v in keys.items() if os.getenv(v)]
+    if os.getenv("OPENAI_BASE_URL") and "OpenAI-compatible" not in found:
+        found.append("OpenAI-compatible (local)")
+    if os.getenv("OLLAMA_HOST") or shutil.which("ollama"):
+        found.append("Ollama")
+    rows.append(("LLM provider", bool(found), ", ".join(found) or "none — set GROQ_API_KEY (free) or see `apex models`"))
+    rows.append(("Pinned model", True, os.getenv("APEX_MODEL") or "not pinned (provider cascade)"))
+    rows.append(("Docker sandbox", docker_available(),
+                 "ready — enable with APEX_SANDBOX=docker" if docker_available() else "Docker not reachable (optional)"))
+    for label, mod, extra in (("Dashboard server", "fastapi", "server"), ("MCP server", "mcp", "mcp"),
+                              ("Eval scorers", "bandit", "eval")):
+        ok = importlib.util.find_spec(mod) is not None
+        rows.append((label, ok, "installed" if ok else f'pip install "apex-ai-dev-engine[{extra}]"'))
+    return rows
+
+
+def cmd_doctor(args: argparse.Namespace):
+    print(f"\n  {bold('APEX doctor')}\n")
+    for label, ok, detail in doctor_report():
+        print(f"  {green('✔') if ok else amber('•')} {label:18} {muted(detail)}")
+    print()
+
+
 # ── argument parser ────────────────────────────────────────────────────────────
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="apex",
-        description="APEX AI Dev Engine v3 — Multi-Agent Full-Stack Generator",
+        description="APEX Society — a 9-agent AI software team",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -215,6 +266,10 @@ Examples:
   apex audit --path ./my-project
   apex list
   apex models
+  apex serve            # live office dashboard
+  apex mcp              # MCP server for Claude Desktop / Cursor
+  apex eval --self-test # benchmark harness
+  apex doctor           # check your setup
         """,
     )
     sub = parser.add_subparsers(dest="command", metavar="<command>")
@@ -252,12 +307,28 @@ Examples:
     mdl = sub.add_parser("models", help="List available models")
     mdl.set_defaults(func=cmd_models)
 
+    # serve / mcp / eval / doctor
+    srv = sub.add_parser("serve", help="Start the live office dashboard")
+    srv.add_argument("--host", default=None, help="Bind address (default 127.0.0.1)")
+    srv.add_argument("--port", type=int, default=None, help="Port (default 8000)")
+    srv.set_defaults(func=cmd_serve)
+    mcp = sub.add_parser("mcp", help="Start the MCP server (extra args are passed through, e.g. --http)")
+    mcp.set_defaults(func=None)
+    ev = sub.add_parser("eval", help="Single agent vs society benchmark (extra args passed through)")
+    ev.set_defaults(func=None)
+    doc = sub.add_parser("doctor", help="Check providers, Docker and optional extras")
+    doc.set_defaults(func=cmd_doctor)
+
     return parser
 
 
 # ── entry ──────────────────────────────────────────────────────────────────────
 def main():
     logging.basicConfig(level=logging.WARNING)
+    # Pass-through commands own their arguments (including --help).
+    passthrough = {"mcp": ("apex.mcp_sdk", "mcp"), "eval": ("apex.evals.run_eval", "eval")}
+    if len(sys.argv) > 1 and sys.argv[1] in passthrough:
+        sys.exit(_lazy(*passthrough[sys.argv[1]]).main(sys.argv[2:]))
     parser = _build_parser()
     args   = parser.parse_args()
     if not args.command:
