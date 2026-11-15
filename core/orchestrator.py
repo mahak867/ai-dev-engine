@@ -1,21 +1,76 @@
 """
-APEX v3 — Master Orchestrator
-Coordinates: Planner → Architect → Coder → Reviewer → SelfHealer → DocWriter
-Agent-to-agent dialogue is logged at every handoff for Track 3 compliance.
+APEX — pipeline orchestrator for the 9-agent society.
+
+    Memory → Planner ∥ Architect → Coder ⇄ Reviewer → SelfHealer → Debugger
+           → Executor (syntax check + Docker sandbox, heals on failure) → DocWriter
+
+Each stage is one method. Agents talk through ``_dialogue`` (logged and
+streamed to the dashboard) and report progress through ``_emit``.
 """
 from __future__ import annotations
-import os, logging, time, threading, subprocess, tempfile, ast
+
+import json
+import logging
+import os
+import time
+from collections.abc import Callable, Iterator
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Iterator
-from core.ai.provider import LLMProvider
+from typing import Any
+
+from core import telemetry
 from core.agents.base import (
-    PlannerAgent, ArchitectAgent, CoderAgent,
-    ReviewerAgent, DebuggerAgent, SelfHealerAgent, DocWriterAgent,
+    AgentResult,
+    ArchitectAgent,
+    CoderAgent,
+    DebuggerAgent,
+    DocWriterAgent,
+    PlannerAgent,
+    ReviewerAgent,
+    SelfHealerAgent,
 )
+from core.ai.provider import LLMProvider
+from core.execution.sandbox import DockerSandbox, sandbox_enabled
 from core.memory.store import MemoryStore, ProjectMemory
 from core.security import UnsafePathError, safe_join, write_files_contained
-from core import telemetry
-from core.execution.sandbox import DockerSandbox, sandbox_enabled
+from core.syntax_check import check_syntax
+
+MAX_REVIEW_ROUNDS = 3          # Reviewer ⇄ Coder rounds before proceeding anyway
+MIN_EXPECTED_FILES = 3         # fewer than this usually means the output failed to parse
+REVIEW_CONTEXT_CHARS = 12_000  # cap on code sent to the Reviewer per round
+CODE_EXTENSIONS = (".py", ".ts", ".js", ".go", ".rs", ".tsx", ".jsx")
+DEBUG_EXTENSIONS = (".py", ".js", ".ts", ".go", ".rs")
+
+
+@dataclass
+class _Run:
+    """Mutable state for one pipeline run."""
+    name: str
+    request: str
+    out: Path
+    ctx: dict[str, Any]
+    mem: ProjectMemory
+    files: dict[str, str] = field(default_factory=dict)
+    arch: AgentResult | None = None
+    review: AgentResult | None = None
+    review_rounds: int = 0
+
+
+def _outcome(future: Future) -> tuple[AgentResult | None, str | None]:
+    """(result, error message) for a finished agent future."""
+    err = future.exception()
+    if err:
+        return None, str(err)
+    result = future.result()
+    return (result, None) if result.success else (None, result.error or "agent failed")
+
+
+def _code_dump(files: dict[str, str], limit: int | None = None) -> str:
+    """Concatenate files for a prompt, code files first."""
+    ordered = sorted(files.items(), key=lambda kv: (not kv[0].endswith(CODE_EXTENSIONS), kv[0]))
+    return "\n\n".join(f"// {path}\n{src}" for path, src in ordered)[:limit]
+
 
 log = logging.getLogger("apex.orchestrator")
 
@@ -27,12 +82,13 @@ class Orchestrator:
         self,
         model: str = "auto",
         dry_run: bool = False,
-        on_event: Callable[[str, str, str], None] | None = None,
+        on_event: Callable[..., None] | None = None,
         on_dialogue: Callable[[str, str, str, str], None] | None = None,
         memory_store: MemoryStore | None = None,
     ):
         self.dry_run    = dry_run
-        self.on_event   = on_event or (lambda agent, status, msg: print(f"[{agent}] {status}: {msg}"))
+        self.on_event: Callable[..., None] = on_event or (
+            lambda agent, status, msg, extra=None: print(f"[{agent}] {status}: {msg}"))
         self.on_dialogue = on_dialogue  # callback(from_agent, to_agent, msg_type, content)
         self.memory     = memory_store if memory_store is not None else MemoryStore()
         self.dialogue_log: list[dict] = []
@@ -78,354 +134,283 @@ class Orchestrator:
             return self._generate_fullstack(name, request, output_dir, skip_review)
 
     def _generate_fullstack(self, name, request, output_dir, skip_review) -> str:
-        mem = ProjectMemory(name=name, request=request)
+        run = self._begin(name, request, output_dir)
+        self._stage_memory(run)
+        self._stage_plan(run)
+        self._stage_code(run)
+        if not self.dry_run:
+            if not skip_review:
+                self._stage_review(run)
+            self._stage_heal(run)
+            self._stage_debug(run)
+            self._stage_execute(run)
+        self._stage_document(run)
+        return self._finish(run)
+
+    # ── Pipeline stages ────────────────────────────────────────────────────────
+    def _begin(self, name: str, request: str, output_dir: str) -> _Run:
         # `name` becomes a directory under output_dir — it must be one safe component.
         out = safe_join(output_dir, name)
         if out.parent != Path(output_dir).resolve():
             raise UnsafePathError(f"project name must be a single path component: {name!r}")
-        ctx = {"name": name, "request": request}
-        self.dialogue_log = []  # reset per run
-
-        # ── Inject memory context from past similar runs ───────────────────────
-        # This makes the system smarter over time — agents see what worked
-        # in similar past projects and avoid repeating mistakes.
-        memory_context = self.memory.get_context_for_request(request)
-        if memory_context:
-            ctx["memory_context"] = memory_context
-            self._emit("System", "running",
-                f"Found {len(self.memory.list_projects())} past projects — injecting learned context")
-            self._dialogue("Memory", "Planner", "context",
-                f"Relevant past project context loaded. {memory_context[:300]}")
-
-        # ── 1 + 2: Planner & Architect run IN PARALLEL ─────────────────────────────
-        # This is a Track 3 differentiator — agents work simultaneously, not
-        # sequentially. Both start at the same time; we wait for both to finish.
-        plan_result = arch_result = None
-        arch_result = None  # also used in review negotiation loop
-
-        if not self.dry_run:
-            self._emit("Planner",   "running", "Analyzing requirements in parallel...")
-            self._emit("Architect", "running", "Pre-loading architecture patterns...")
-
-            plan_container  = [None]
-            arch_container  = [None]
-            plan_err        = [None]
-            arch_err        = [None]
-
-            def _run_planner():
-                try:
-                    plan_container[0] = self.planner.run(ctx.copy())
-                except Exception as e:
-                    plan_err[0] = str(e)
-
-            def _run_architect():
-                try:
-                    # Architect gets a basic context first; will be updated once
-                    # Planner finishes, but starts immediately for speed.
-                    arch_container[0] = self.architect.run(ctx.copy())
-                except Exception as e:
-                    arch_err[0] = str(e)
-
-            # copy the caller's context so per-agent usage tracking follows the threads
-            t_plan = threading.Thread(target=telemetry.in_context(_run_planner),   daemon=True)
-            t_arch = threading.Thread(target=telemetry.in_context(_run_architect), daemon=True)
-            t_plan.start(); t_arch.start()
-            t_plan.join();  t_arch.join()
-
-            plan_result = plan_container[0]
-            arch_result = arch_container[0]
-
-            if plan_result:
-                mem.plan    = plan_result.output
-                ctx["plan"] = plan_result.output
-                mem.add_event("Planner", "complete", f"{plan_result.duration:.1f}s")
-                self._emit("Planner", "done",
-                    f"Plan ready ({plan_result.duration:.1f}s) — ran in parallel with Architect")
-                self._dialogue("Planner", "Architect", "handoff",
-                    f"Plan complete. Tech stack and file structure ready. Summary: {plan_result.output[:200]}")
-            else:
-                ctx["plan"] = '{"tech_stack": {"backend": "FastAPI"}}'
-                self._emit("Planner", "done", f"Plan error: {plan_err[0]}")
-
-            if arch_result:
-                ctx["architecture"] = arch_result.output
-                self._emit("Architect", "done",
-                    f"Architecture ready ({arch_result.duration:.1f}s) — ran in parallel with Planner")
-                self._dialogue("Architect", "Coder", "handoff",
-                    f"Architecture complete. Security decisions defined. Key: {arch_result.output[:200]}")
-            else:
-                self._emit("Architect", "done", f"Arch error: {arch_err[0]}")
-
-            if plan_result and arch_result:
-                self._dialogue("Planner", "Coder", "sync",
-                    f"Parallel phase complete. Both Planner and Architect finished. "
-                    f"Planner took {plan_result.duration:.1f}s, Architect took {arch_result.duration:.1f}s. "
-                    f"Combined time saved vs sequential: ~{min(plan_result.duration, arch_result.duration):.0f}s. "
-                    f"Handing combined context to Coder.")
-        else:
-            ctx["plan"] = '{"tech_stack": {"frontend": "Next.js", "backend": "FastAPI"}}'
-            self._emit("Planner",   "done", "[dry-run]")
-            self._emit("Architect", "done", "[dry-run]")
-
-        # 3. Code generation
-        self._emit("Coder", "running", "Generating production code...")
-        all_files: dict[str, str] = {}
-        if not self.dry_run:
-            code_result = self.coder.run(ctx)
-            all_files.update(code_result.files)
-            if not code_result.success:
-                self._emit("Coder", "error", f"Coder failed: {code_result.error}")
-            elif len(all_files) < 3:
-                self._emit("Coder", "error",
-                    f"Only {len(all_files)} file(s) generated — may indicate a parsing "
-                    f"or generation issue. Raw output was {len(code_result.output)} chars.")
-            else:
-                self._emit("Coder", "done", f"{len(all_files)} files generated ({code_result.duration:.1f}s)")
-            self._dialogue("Coder", "Reviewer",
-                "handoff",
-                f"Code generation complete. {len(all_files)} files produced. Requesting security audit and quality review. Files: {list(all_files.keys())[:8]}")
-        else:
-            all_files = {"README.md": f"# {name}\n{request}"}
-            self._emit("Coder", "done", "[dry-run] 1 stub file")
-
-        # 4. Review — with conflict resolution.
-        # Reviewer can REJECT the submission; if it does, Coder revises and
-        # Reviewer re-reviews, up to MAX_REVIEW_ROUNDS times. This is the
-        # explicit Track 3 requirement: agents must be able to disagree and
-        # resolve it through dialogue, not just hand off silently.
-        MAX_REVIEW_ROUNDS = 3
-        review_result = None
-        if not skip_review and not self.dry_run:
-            for round_num in range(1, MAX_REVIEW_ROUNDS + 1):
-                self._emit("Reviewer", "running",
-                    f"Reviewing code quality & security (round {round_num})...")
-                # Review ALL files, prioritising code files first
-                priority_exts = ('.py','.ts','.js','.go','.rs','.tsx','.jsx')
-                sorted_files = sorted(all_files.items(),
-                    key=lambda x: (0 if x[0].endswith(priority_exts) else 1, x[0]))
-                code_dump = "\n\n".join(
-                    f"// {fp}\n{c}" for fp, c in sorted_files
-                )[:12000]  # cap at 12K chars so Reviewer context stays fast
-                review_result = self.reviewer.run({"code": code_dump})
-
-                if review_result.verdict == "rejected" and round_num < MAX_REVIEW_ROUNDS:
-                    notes = self.reviewer.build_revision_notes(review_result.output)
-                    self._emit("Reviewer", "rejected",
-                        f"Round {round_num}: score {review_result.score}/100 — "
-                        f"{len(review_result.critical)} blocking issue(s), sent back to Coder")
-                    # DIALOGUE: Reviewer → Coder (rejection)
-                    self._dialogue("Reviewer", "Coder",
-                        "request",
-                        f"REJECTED (round {round_num}, score {review_result.score}/100). "
-                        f"Revision required: {notes[:300]}")
-
-                    # On round 2+, loop in Architect to re-evaluate design
-                    # This is real multi-agent negotiation: not just Reviewer↔Coder
-                    # but also Architect re-examining structural decisions
-                    if round_num >= 2 and arch_result:
-                        self._emit("Architect", "running",
-                            f"Re-evaluating architecture after round {round_num} rejection...")
-                        arch_revision_ctx = {**ctx,
-                            "review_feedback": notes,
-                            "request": f"The Reviewer rejected the code. Issues: {notes[:300]}. "
-                                       f"Re-examine your architecture decisions and provide updated "
-                                       f"security-focused guidance for the Coder's revision."}
-                        arch_revision = self.architect.run(arch_revision_ctx)
-                        ctx["architecture"] = arch_revision.output
-                        self._emit("Architect", "done",
-                            f"Architecture updated ({arch_revision.duration:.1f}s)")
-                        self._dialogue("Architect", "Coder", "negotiation",
-                            f"Round {round_num} architecture review complete. "
-                            f"Updated security guidance: {arch_revision.output[:200]}")
-
-                    self._emit("Coder", "running", f"Revising per Reviewer feedback (round {round_num})...")
-                    revise_result = self.coder.revise(all_files, notes)
-                    if revise_result.files:
-                        all_files.update(revise_result.files)
-                    self._emit("Coder", "done",
-                        f"Revised {len(revise_result.files)} file(s) ({revise_result.duration:.1f}s)")
-                    # DIALOGUE: Coder → Reviewer (patch submitted)
-                    self._dialogue("Coder", "Reviewer",
-                        "patch",
-                        f"Revision complete for round {round_num}. "
-                        f"Patched {len(revise_result.files)} file(s): {list(revise_result.files.keys())[:8]}. "
-                        f"Resubmitting for review.")
-                    continue  # re-review the patched code
-
-                # Either approved, or we've exhausted rounds — stop looping.
-                if review_result.files:
-                    all_files.update(review_result.files)
-                if review_result.verdict == "approved":
-                    self._emit("Reviewer", "done",
-                        f"Approved — score {review_result.score}/100 (round {round_num})")
-                    self._dialogue("Reviewer", "SelfHealer",
-                        "feedback",
-                        f"Code APPROVED after {round_num} round(s). Score {review_result.score}/100. "
-                        f"No critical issues remain. SelfHealer to do proactive check.")
-                else:
-                    self._emit("Reviewer", "done",
-                        f"Round limit reached — proceeding with score {review_result.score}/100, "
-                        f"{len(review_result.critical)} unresolved issue(s)")
-                    self._dialogue("Reviewer", "SelfHealer",
-                        "feedback",
-                        f"Max revision rounds ({MAX_REVIEW_ROUNDS}) reached without full approval. "
-                        f"Score {review_result.score}/100. Remaining issues handed to SelfHealer as a fallback: "
-                        f"{review_result.critical[:5]}")
-                break
-
-        # 5. Auto-heal
-        if not self.dry_run:
-            self._emit("SelfHealer", "running", "Running self-healing pass...")
-            heal_result = self.healer.heal(all_files, "proactive check")
-            if heal_result.files:
-                all_files.update(heal_result.files)
-                self._emit("SelfHealer", "done", f"Patched {len(heal_result.files)} files")
-                self._dialogue("SelfHealer", "Debugger",
-                    "handoff",
-                    f"Patched {len(heal_result.files)} files. Requesting runtime error check on patched code.")
-            else:
-                self._emit("SelfHealer", "done", "No issues found")
-                self._dialogue("SelfHealer", "Debugger",
-                    "handoff",
-                    "No patches needed. Code is clean. Debugger to verify no runtime errors.")
-
-        # 5b. Debugger — runtime error check (now actually runs in pipeline)
-        if not self.dry_run:
-            self._emit("Debugger", "running", "Verifying no runtime errors...")
-            code_sample = "\n\n".join(
-                f"// {fp}\n{c}" for fp, c in list(all_files.items())[:3]
-                if fp.endswith(('.py','.js','.ts','.go','.rs'))
-            ) or "\n\n".join(f"// {fp}\n{c}" for fp, c in list(all_files.items())[:2])
-            debug_result = self.debugger.run({
-                "code": code_sample,
-                "error": "Proactive check: scan for import errors, undefined vars, missing await, type mismatches, and startup crashes."
-            })
-            if debug_result.files:
-                all_files.update(debug_result.files)
-                self._emit("Debugger", "done", f"Fixed {len(debug_result.files)} runtime issue(s)")
-                self._dialogue("Debugger", "DocWriter", "handoff",
-                    f"Fixed {len(debug_result.files)} runtime issue(s). Code ready for documentation.")
-            else:
-                self._emit("Debugger", "done", "No runtime errors found")
-                self._dialogue("Debugger", "DocWriter", "handoff",
-                    "Runtime check passed. No startup errors detected. Passing to DocWriter.")
-
-        # 5c. Executor — syntax validate generated files (proof code works)
-        if not self.dry_run:
-            self._emit("Executor", "running", "Validating syntax of generated files...")
-            passed, failed, total = 0, [], 0
-            node_available = True
-            with tempfile.TemporaryDirectory() as tmpdir:
-                for fname, content in all_files.items():
-                    if fname.endswith(".py"):
-                        total += 1
-                        try:
-                            ast.parse(content)
-                            passed += 1
-                        except SyntaxError as e:
-                            failed.append(f"{fname}: {e}")
-                    elif fname.endswith((".js", ".ts", ".tsx", ".jsx")):
-                        total += 1
-                        if not node_available:
-                            if content.count("{") == content.count("}") and \
-                               content.count("(") == content.count(")"):
-                                passed += 1
-                            else:
-                                failed.append(f"{fname}: unbalanced brackets (basic check)")
-                            continue
-                        fpath = Path(tmpdir) / fname.replace("/", "_")
-                        fpath.write_text(content, encoding="utf-8")
-                        try:
-                            result = subprocess.run(
-                                ["node", "--check", str(fpath)],
-                                capture_output=True, timeout=10
-                            )
-                            if result.returncode == 0:
-                                passed += 1
-                            else:
-                                failed.append(f"{fname}: {result.stderr.decode()[:100]}")
-                        except FileNotFoundError:
-                            node_available = False
-                            log.warning("node binary not found — falling back to basic syntax check for JS/TS files")
-                            if content.count("{") == content.count("}") and \
-                               content.count("(") == content.count(")"):
-                                passed += 1
-                            else:
-                                failed.append(f"{fname}: unbalanced brackets (basic check)")
-                        except subprocess.TimeoutExpired:
-                            failed.append(f"{fname}: syntax check timed out")
-
-            if total == 0:
-                self._emit("Executor", "done", "No validatable files (non-Python/JS project)")
-            elif not failed:
-                suffix = " (basic check — node unavailable on host)" if not node_available else ""
-                self._emit("Executor", "done",
-                    f"✓ All {passed}/{total} files pass syntax validation{suffix}")
-                self._dialogue("Executor", "DocWriter", "validation",
-                    f"Syntax validation PASSED: {passed}/{total} files validated. "
-                    f"Code is syntactically correct and ready for deployment.")
-            else:
-                self._emit("Executor", "error",
-                    f"{passed}/{total} passed, {len(failed)} failed: {failed[0][:80]}")
-                self._dialogue("Executor", "DocWriter", "validation",
-                    f"Syntax validation: {passed}/{total} passed. "
-                    f"Issues: {failed[:3]}")
-
-        # 5d. Executor — run it for real in the Docker sandbox, heal on failure
+        self.dialogue_log = []
         self.last_sandbox = None
-        if not self.dry_run and sandbox_enabled():
-            all_files = self._sandbox_loop(all_files)
+        return _Run(name=name, request=request, out=out,
+                    ctx={"name": name, "request": request},
+                    mem=ProjectMemory(name=name, request=request))
 
-        # 6. Documentation
+    def _stage_memory(self, run: _Run) -> None:
+        """Memory agent: inject lessons from similar past runs."""
+        context = self.memory.get_context_for_request(run.request)
+        if not context:
+            return
+        run.ctx["memory_context"] = context
+        self._emit("System", "running",
+                   f"Found {len(self.memory.list_projects())} past projects — injecting learned context")
+        self._dialogue("Memory", "Planner", "context",
+                       f"Relevant past project context loaded. {context[:300]}")
+
+    def _stage_plan(self, run: _Run) -> None:
+        """Planner and Architect run in parallel on the same request."""
+        ctx = run.ctx
+        if self.dry_run:
+            ctx["plan"] = '{"tech_stack": {"frontend": "Next.js", "backend": "FastAPI"}}'
+            self._emit("Planner", "done", "[dry-run]")
+            self._emit("Architect", "done", "[dry-run]")
+            return
+
+        self._emit("Planner", "running", "Analyzing requirements in parallel...")
+        self._emit("Architect", "running", "Pre-loading architecture patterns...")
+        # in_context copies the caller's context so usage tracking follows the threads
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="apex-plan") as pool:
+            plan_future = pool.submit(telemetry.in_context(self.planner.run, ctx.copy()))
+            arch_future = pool.submit(telemetry.in_context(self.architect.run, ctx.copy()))
+        plan, plan_err = _outcome(plan_future)
+        arch, arch_err = _outcome(arch_future)
+        run.arch = arch
+
+        if plan:
+            ctx["plan"] = plan.output
+            run.mem.plan = plan.output  # type: ignore[assignment]  # stored as the raw plan text
+            run.mem.add_event("Planner", "complete", f"{plan.duration:.1f}s")
+            self._emit("Planner", "done",
+                       f"Plan ready ({plan.duration:.1f}s) — ran in parallel with Architect")
+            self._dialogue("Planner", "Architect", "handoff",
+                           f"Plan complete. Tech stack and file structure ready. Summary: {plan.output[:200]}")
+        else:
+            ctx["plan"] = '{"tech_stack": {"backend": "FastAPI"}}'
+            self._emit("Planner", "done", f"Plan error: {plan_err}")
+
+        if arch:
+            ctx["architecture"] = arch.output
+            self._emit("Architect", "done",
+                       f"Architecture ready ({arch.duration:.1f}s) — ran in parallel with Planner")
+            self._dialogue("Architect", "Coder", "handoff",
+                           f"Architecture complete. Security decisions defined. Key: {arch.output[:200]}")
+        else:
+            self._emit("Architect", "done", f"Arch error: {arch_err}")
+
+        if plan and arch:
+            self._dialogue(
+                "Planner", "Coder", "sync",
+                f"Parallel phase complete. Both Planner and Architect finished. "
+                f"Planner took {plan.duration:.1f}s, Architect took {arch.duration:.1f}s. "
+                f"Combined time saved vs sequential: ~{min(plan.duration, arch.duration):.0f}s. "
+                f"Handing combined context to Coder.")
+
+    def _stage_code(self, run: _Run) -> None:
+        self._emit("Coder", "running", "Generating production code...")
+        if self.dry_run:
+            run.files = {"README.md": f"# {run.name}\n{run.request}"}
+            self._emit("Coder", "done", "[dry-run] 1 stub file")
+            return
+        result = self.coder.run(run.ctx)
+        run.files.update(result.files)
+        count = len(run.files)
+        if not result.success:
+            self._emit("Coder", "error", f"Coder failed: {result.error}")
+        elif count < MIN_EXPECTED_FILES:
+            self._emit("Coder", "error",
+                       f"Only {count} file(s) generated — may indicate a parsing "
+                       f"or generation issue. Raw output was {len(result.output)} chars.")
+        else:
+            self._emit("Coder", "done", f"{count} files generated ({result.duration:.1f}s)")
+        self._dialogue("Coder", "Reviewer", "handoff",
+                       f"Code generation complete. {count} files produced. Requesting security audit "
+                       f"and quality review. Files: {list(run.files)[:8]}")
+
+    def _stage_review(self, run: _Run) -> None:
+        """
+        Reviewer ⇄ Coder negotiation. The Reviewer can reject; the Coder revises
+        and resubmits, up to MAX_REVIEW_ROUNDS. From round 2 the Architect is
+        pulled back in to rethink the design.
+        """
+        for round_num in range(1, MAX_REVIEW_ROUNDS + 1):
+            run.review_rounds = round_num
+            self._emit("Reviewer", "running",
+                       f"Reviewing code quality & security (round {round_num})...")
+            review = run.review = self.reviewer.run({"code": _code_dump(run.files, REVIEW_CONTEXT_CHARS)})
+
+            if review.verdict == "rejected" and round_num < MAX_REVIEW_ROUNDS:
+                self._revise_after_rejection(run, round_num)
+                continue
+
+            # Approved, or out of rounds.
+            run.files.update(review.files or {})
+            if review.verdict == "approved":
+                self._emit("Reviewer", "done", f"Approved — score {review.score}/100 (round {round_num})")
+                self._dialogue("Reviewer", "SelfHealer", "feedback",
+                               f"Code APPROVED after {round_num} round(s). Score {review.score}/100. "
+                               f"No critical issues remain. SelfHealer to do proactive check.")
+            else:
+                self._emit("Reviewer", "done",
+                           f"Round limit reached — proceeding with score {review.score}/100, "
+                           f"{len(review.critical)} unresolved issue(s)")
+                self._dialogue("Reviewer", "SelfHealer", "feedback",
+                               f"Max revision rounds ({MAX_REVIEW_ROUNDS}) reached without full approval. "
+                               f"Score {review.score}/100. Remaining issues handed to SelfHealer as a "
+                               f"fallback: {review.critical[:5]}")
+            return
+
+    def _revise_after_rejection(self, run: _Run, round_num: int) -> None:
+        review = run.review
+        assert review is not None
+        notes = self.reviewer.build_revision_notes(review.output)
+        self._emit("Reviewer", "rejected",
+                   f"Round {round_num}: score {review.score}/100 — "
+                   f"{len(review.critical)} blocking issue(s), sent back to Coder")
+        self._dialogue("Reviewer", "Coder", "request",
+                       f"REJECTED (round {round_num}, score {review.score}/100). "
+                       f"Revision required: {notes[:300]}")
+
+        if round_num >= 2 and run.arch:
+            self._emit("Architect", "running",
+                       f"Re-evaluating architecture after round {round_num} rejection...")
+            revision = self.architect.run({
+                **run.ctx,
+                "review_feedback": notes,
+                "request": f"The Reviewer rejected the code. Issues: {notes[:300]}. "
+                           f"Re-examine your architecture decisions and provide updated "
+                           f"security-focused guidance for the Coder's revision.",
+            })
+            run.ctx["architecture"] = revision.output
+            self._emit("Architect", "done", f"Architecture updated ({revision.duration:.1f}s)")
+            self._dialogue("Architect", "Coder", "negotiation",
+                           f"Round {round_num} architecture review complete. "
+                           f"Updated security guidance: {revision.output[:200]}")
+
+        self._emit("Coder", "running", f"Revising per Reviewer feedback (round {round_num})...")
+        revised = self.coder.revise(run.files, notes)
+        run.files.update(revised.files or {})
+        self._emit("Coder", "done", f"Revised {len(revised.files)} file(s) ({revised.duration:.1f}s)")
+        self._dialogue("Coder", "Reviewer", "patch",
+                       f"Revision complete for round {round_num}. "
+                       f"Patched {len(revised.files)} file(s): {list(revised.files)[:8]}. "
+                       f"Resubmitting for review.")
+
+    def _stage_heal(self, run: _Run) -> None:
+        self._emit("SelfHealer", "running", "Running self-healing pass...")
+        heal = self.healer.heal(run.files, "proactive check")
+        if heal.files:
+            run.files.update(heal.files)
+            self._emit("SelfHealer", "done", f"Patched {len(heal.files)} files")
+            self._dialogue("SelfHealer", "Debugger", "handoff",
+                           f"Patched {len(heal.files)} files. Requesting runtime error check on patched code.")
+        else:
+            self._emit("SelfHealer", "done", "No issues found")
+            self._dialogue("SelfHealer", "Debugger", "handoff",
+                           "No patches needed. Code is clean. Debugger to verify no runtime errors.")
+
+    def _stage_debug(self, run: _Run) -> None:
+        self._emit("Debugger", "running", "Verifying no runtime errors...")
+        head = list(run.files.items())
+        sample = (_code_dump({k: v for k, v in head[:3] if k.endswith(DEBUG_EXTENSIONS)})
+                  or _code_dump(dict(head[:2])))
+        result = self.debugger.run({
+            "code": sample,
+            "error": "Proactive check: scan for import errors, undefined vars, missing await, "
+                     "type mismatches, and startup crashes.",
+        })
+        if result.files:
+            run.files.update(result.files)
+            self._emit("Debugger", "done", f"Fixed {len(result.files)} runtime issue(s)")
+            self._dialogue("Debugger", "DocWriter", "handoff",
+                           f"Fixed {len(result.files)} runtime issue(s). Code ready for documentation.")
+        else:
+            self._emit("Debugger", "done", "No runtime errors found")
+            self._dialogue("Debugger", "DocWriter", "handoff",
+                           "Runtime check passed. No startup errors detected. Passing to DocWriter.")
+
+    def _stage_execute(self, run: _Run) -> None:
+        """Executor agent: static syntax check, then (if enabled) a real sandboxed run."""
+        self._emit("Executor", "running", "Validating syntax of generated files...")
+        report = check_syntax(run.files)
+        if report.total == 0:
+            self._emit("Executor", "done", "No validatable files (non-Python/JS project)")
+        elif report.ok:
+            suffix = "" if report.node_available else " (basic check — node unavailable on host)"
+            self._emit("Executor", "done",
+                       f"✓ All {report.passed}/{report.total} files pass syntax validation{suffix}")
+            self._dialogue("Executor", "DocWriter", "validation",
+                           f"Syntax validation PASSED: {report.passed}/{report.total} files validated.")
+        else:
+            self._emit("Executor", "error",
+                       f"{report.passed}/{report.total} passed, {len(report.failed)} failed: "
+                       f"{report.failed[0][:80]}")
+            self._dialogue("Executor", "DocWriter", "validation",
+                           f"Syntax validation: {report.passed}/{report.total} passed. "
+                           f"Issues: {report.failed[:3]}")
+        if sandbox_enabled():
+            run.files = self._sandbox_loop(run.files)
+
+    def _stage_document(self, run: _Run) -> None:
         self._emit("DocWriter", "running", "Writing documentation...")
-        if not self.dry_run:
-            doc_result = self.docwriter.run(ctx)
-            all_files.update(doc_result.files)
-            self._emit("DocWriter", "done", "README.md generated")
-            self._dialogue("DocWriter", "System", "complete",
-                "Documentation complete. README.md generated with full API docs, setup instructions, and architecture notes.")
+        if self.dry_run:
+            return
+        doc = self.docwriter.run(run.ctx)
+        run.files.update(doc.files)
+        self._emit("DocWriter", "done", "README.md generated")
+        self._dialogue("DocWriter", "System", "complete",
+                       "Documentation complete. README.md generated with setup instructions "
+                       "and architecture notes.")
 
-        # 7. Write to disk + save enriched memory
-        mem.update_files(all_files)
-        mem.quality_score = review_result.score if review_result else 100
-        mem.review_rounds = getattr(review_result, '_rounds', 1)
-        mem.file_count = len(all_files)
-
-        # Extract tech stack from plan for future memory context
+    def _finish(self, run: _Run) -> str:
+        """Record what was learned, write the project to disk and report."""
+        mem, review = run.mem, run.review
+        score = review.score if review else 100
+        mem.update_files(run.files)
+        mem.quality_score = score
+        mem.review_rounds = max(1, run.review_rounds)
+        mem.file_count = len(run.files)
         try:
-            import json as _json
-            plan_data = _json.loads(ctx.get("plan", "{}"))
-            mem.tech_stack = plan_data.get("tech_stack", {})
-        except Exception:
-            pass
+            mem.tech_stack = json.loads(run.ctx.get("plan", "{}")).get("tech_stack", {})
+        except (ValueError, AttributeError):
+            pass  # the plan is free text from a model; a missing stack is fine
 
-        # Record lessons from this run
-        if review_result and review_result.score >= 90:
-            mem.add_lesson(f"High quality ({review_result.score}/100) achieved with {len(all_files)} files")
-        if review_result and review_result.critical:
-            for issue in review_result.critical[:3]:
-                mem.add_lesson(f"Watch for: {issue[:80]}")
+        if review and review.score >= 90:
+            mem.add_lesson(f"High quality ({review.score}/100) achieved with {len(run.files)} files")
+        for issue in (review.critical[:3] if review else []):
+            mem.add_lesson(f"Watch for: {issue[:80]}")
 
-        if telemetry.current_tracker():
-            u = telemetry.current_tracker().summary()
-            mem.usage = {k: u[k] for k in ("calls", "total_tokens", "cost_usd", "llm_seconds", "wall_seconds")}
+        tracker = telemetry.current_tracker()
+        usage = tracker.summary() if tracker else {}
+        if usage:
+            mem.usage = {k: usage[k] for k in ("calls", "total_tokens", "cost_usd", "llm_seconds", "wall_seconds")}
         if self.last_sandbox:
             mem.sandbox = {k: self.last_sandbox[k] for k in ("attempts", "passed", "first_attempt_passed")}
-        rejected = self._write_files(out, all_files)
+
+        rejected = self._write_files(run.out, run.files)
         if rejected:
             self._emit("System", "error",
-                f"Refused {len(rejected)} unsafe file path(s) from model output: {rejected[:3]}")
+                       f"Refused {len(rejected)} unsafe file path(s) from model output: {rejected[:3]}")
             mem.add_lesson(f"Model proposed {len(rejected)} path(s) outside the project; they were dropped")
         self.memory.save(mem)
 
-        final_score = review_result.score if review_result else 100
-        usage = telemetry.current_tracker().summary() if telemetry.current_tracker() else {}
-        self._emit("System", "complete", f"Project ready: {out.name}/")
-        self._emit("System", "done",
-            f"complete — {len(all_files)} files generated",
-            {"quality_score": final_score, "files": len(all_files), "usage": usage,
-             "sandbox": self.last_sandbox})
-        return str(out)
+        self._emit("System", "complete", f"Project ready: {run.out.name}/")
+        self._emit("System", "done", f"complete — {len(run.files)} files generated",
+                   {"quality_score": score, "files": len(run.files), "usage": usage,
+                    "sandbox": self.last_sandbox})
+        return str(run.out)
 
     # ── Executor: sandboxed run + heal loop ────────────────────────────────────
     def _sandbox_loop(self, all_files: dict[str, str]) -> dict[str, str]:
@@ -523,13 +508,12 @@ class Orchestrator:
         return result.output
 
     # ── Helpers ────────────────────────────────────────────────────────────────
-    def _emit(self, agent: str, status: str, msg: str, extra: dict = None):
+    def _emit(self, agent: str, status: str, msg: str, extra: dict | None = None):
         log.info(f"[{agent}] {status}: {msg}")
-        if self.on_event:
-            try:
-                self.on_event(agent, status, msg, extra or {})
-            except TypeError:
-                self.on_event(agent, status, msg)
+        try:
+            self.on_event(agent, status, msg, extra or {})
+        except TypeError:  # callbacks that only take (agent, status, msg)
+            self.on_event(agent, status, msg)
 
     def _write_files(self, base: Path, files: dict[str, str]) -> list[str]:
         """Write model-generated files under ``base``; returns rejected paths."""

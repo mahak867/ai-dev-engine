@@ -31,10 +31,10 @@ import re
 import shutil
 import tempfile
 import uuid
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Mapping, Sequence
 
 from core.security import ProcResult, minimal_env, run_argv, to_argv, write_files_contained
 
@@ -208,7 +208,7 @@ class DockerSandbox:
                 return name
         return None
 
-    def smoke_test(self, project: str | os.PathLike, *, files: Mapping[str, str] | None = None) -> SandboxReport:
+    def smoke_test(self, project: str | os.PathLike | None, *, files: Mapping[str, str] | None = None) -> SandboxReport:
         """
         Copy the project (or write ``files``) to a temp dir and run, inside the
         sandbox: compileall → import entry point → pytest. Never touches the
@@ -226,6 +226,8 @@ class DockerSandbox:
                 work.mkdir()
                 write_files_contained(work, files)
             else:
+                if project is None:
+                    raise ValueError("smoke_test needs a project path or files")
                 shutil.copytree(project, work, symlinks=True,
                                 ignore=shutil.ignore_patterns(*_SKIP_DIRS))
                 for p in list(work.rglob("*")):

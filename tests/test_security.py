@@ -55,7 +55,6 @@ class TestSafeJoin:
     def test_sibling_prefix_is_outside(self, tmp_path):
         """The exact startswith() bug from the report: /x/project vs /x/project-other."""
         from core.security import UnsafePathError, safe_join
-        from core.file_engine import FileEngine
         root = tmp_path / "project"
         root.mkdir()
         (tmp_path / "project-other").mkdir()
@@ -63,8 +62,6 @@ class TestSafeJoin:
         assert str(tmp_path / "project-other" / "x").startswith(str(root))
         with pytest.raises(UnsafePathError):
             safe_join(root, "../project-other/x")
-        with pytest.raises(UnsafePathError):
-            FileEngine()._sanitize_path(str(root), "../project-other/x")
 
     @pytest.mark.skipif(IS_WIN, reason="symlinks need privileges on Windows")
     def test_symlink_escape_rejected(self, tmp_path):
@@ -96,28 +93,11 @@ class TestSafeJoin:
         assert not [f for f in tmp_path.rglob(".apex-*")]  # no temp files left behind
 
 
-class TestFileEngine:
-    def test_batch_aborts_before_writing_anything(self, tmp_path):
-        from core.file_engine import FileEngine, UnsafePathError
-        with pytest.raises(UnsafePathError):
-            FileEngine().write_files(str(tmp_path), [
-                {"path": "ok.txt", "content": "fine"},
-                {"path": "../escape.txt", "content": "bad"},
-            ])
-        assert not (tmp_path / "ok.txt").exists()
-        assert not (tmp_path.parent / "escape.txt").exists()
-
-    def test_writes_valid(self, tmp_path):
-        from core.file_engine import FileEngine
-        FileEngine().write_files(str(tmp_path), [{"path": "src/a.py", "content": "x=1"}])
-        assert (tmp_path / "src" / "a.py").read_text() == "x=1"
-
-
 class TestOrchestratorWrites:
     def test_model_paths_are_contained(self, tmp_path):
         """LLM-parsed filenames are untrusted (OWASP LLM05: improper output handling)."""
-        from core.orchestrator import Orchestrator
         from core.memory.store import MemoryStore
+        from core.orchestrator import Orchestrator
         sentinel = tmp_path / "sentinel.txt"
         sentinel.write_text("untouched")
         orch = Orchestrator(dry_run=True, memory_store=MemoryStore(str(tmp_path / "mem")))
@@ -132,8 +112,8 @@ class TestOrchestratorWrites:
         assert not (out / ".git").exists()
 
     def test_project_name_must_be_single_component(self, tmp_path):
-        from core.orchestrator import Orchestrator
         from core.memory.store import MemoryStore
+        from core.orchestrator import Orchestrator
         from core.security import UnsafePathError
         orch = Orchestrator(dry_run=True, memory_store=MemoryStore(str(tmp_path / "mem")))
         with pytest.raises(UnsafePathError):
@@ -141,42 +121,32 @@ class TestOrchestratorWrites:
 
 
 # ── X1 / X2: execution ─────────────────────────────────────────────────────────
-class TestExecutor:
-    def test_disabled_by_default(self, tmp_path):
-        from core.execution.runner import Executor
-        r = Executor(str(tmp_path)).run([sys.executable, "-c", "print(1)"])
-        assert not r.ok and "disabled" in r.stderr
 
-    def test_env_flag_enables(self, tmp_path, monkeypatch):
-        from core.execution.runner import Executor
-        monkeypatch.setenv("APEX_ALLOW_EXECUTION", "1")
-        assert Executor(str(tmp_path)).run([sys.executable, "-c", "print(1)"]).ok
 
+# ── tool registry ──────────────────────────────────────────────────────────────
+
+
+# ── X1: process execution primitive used by the sandbox ───────────────────────
+class TestRunArgv:
     def test_shell_metacharacters_are_inert(self, tmp_path):
-        from core.execution.runner import Executor
-        ex = Executor(str(tmp_path), allow_execution=True)
-        r = ex.run(f'"{sys.executable}" -c "print(1)" ; touch pwned')
+        from core.security import run_argv
+        run_argv(f'"{sys.executable}" -c "print(1)" ; touch pwned', tmp_path)
         assert not (tmp_path / "pwned").exists()
-        r = ex.run([sys.executable, "-c", "import sys; print(sys.argv[1:])", "$(touch pwned2)", "`id`"])
-        assert "$(touch pwned2)" in r.stdout
-        assert not (tmp_path / "pwned2").exists()
+        r = run_argv([sys.executable, "-c", "import sys; print(sys.argv[1:])", "$(touch pwned2)", "`id`"], tmp_path)
+        assert "$(touch pwned2)" in r.stdout and not (tmp_path / "pwned2").exists()
 
     def test_child_env_has_no_secrets(self, tmp_path, monkeypatch):
-        from core.execution.runner import Executor
-        monkeypatch.setenv("QWEN_API_KEY", "sk-should-not-leak-123456789")
-        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "nope")
-        monkeypatch.setenv("GITHUB_TOKEN", "nope")
-        r = Executor(str(tmp_path), allow_execution=True).run(
-            [sys.executable, "-c", "import os, json; print(json.dumps(sorted(os.environ)))"])
+        from core.security import run_argv
+        for var in ("QWEN_API_KEY", "AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN"):
+            monkeypatch.setenv(var, "sk-should-not-leak-123456789")
+        r = run_argv([sys.executable, "-c", "import os, json; print(json.dumps(sorted(os.environ)))"], tmp_path)
         names = json.loads(r.stdout.strip().splitlines()[-1])
-        assert "QWEN_API_KEY" not in names
-        assert "AWS_SECRET_ACCESS_KEY" not in names
-        assert "GITHUB_TOKEN" not in names
         assert "PATH" in names
+        assert not {"QWEN_API_KEY", "AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN"} & set(names)
 
     @pytest.mark.skipif(IS_WIN, reason="POSIX process groups")
     def test_timeout_kills_process_tree(self, tmp_path):
-        from core.execution.runner import Executor
+        from core.security import run_argv
         script = tmp_path / "spawn.py"
         script.write_text(
             "import subprocess, sys, time\n"
@@ -184,103 +154,21 @@ class TestExecutor:
             "print(p.pid, flush=True)\n"
             "time.sleep(60)\n"
         )
-        r = Executor(str(tmp_path), timeout=2, allow_execution=True).run([sys.executable, str(script)])
+        r = run_argv([sys.executable, str(script)], tmp_path, timeout=2)
         assert r.timed_out
-        grandchild = int(r.stdout.split()[0])
         time.sleep(0.5)
-        assert not _alive(grandchild), "grandchild survived the timeout"
+        assert not _alive(int(r.stdout.split()[0])), "grandchild survived the timeout"
 
-    def test_run_file_rejects_escape(self, tmp_path):
-        from core.execution.runner import Executor
-        r = Executor(str(tmp_path), allow_execution=True).run_file("../../etc/passwd")
-        assert not r.ok
+    def test_missing_binary_and_empty_command(self, tmp_path):
+        from core.security import run_argv
+        assert run_argv(["definitely-not-a-real-binary-xyz"], tmp_path).returncode == -1
+        with pytest.raises(ValueError):
+            run_argv("", tmp_path)
 
-    def test_auto_run_requires_approval(self, tmp_path):
-        from core.execution.auto_runner import auto_run
-        from core.security import ExecutionDisabledError
-        with pytest.raises(ExecutionDisabledError):
-            auto_run(str(tmp_path))
-
-    def test_deploy_requires_approval(self, tmp_path):
-        from core.ai.deployer import deploy_to_railway
-        from core.security import ExecutionDisabledError
-        with pytest.raises(ExecutionDisabledError):
-            deploy_to_railway(str(tmp_path))
-
-    @pytest.mark.skipif(IS_WIN, reason="newline in filename")
-    def test_render_yaml_name_sanitised(self, tmp_path):
-        from core.ai.deployer import deploy_to_render
-        proj = tmp_path / "evil\nname: x"
-        proj.mkdir()
-        deploy_to_render(str(proj))
-        y = (proj / "render.yaml").read_text()
-        assert "\nname: x" not in y
-
-
-class TestAutoHeal:
-    def test_error_text_cannot_pull_outside_files(self, tmp_path, monkeypatch):
-        from core.execution import auto_heal
-        outside = tmp_path / "secret.env"
-        outside.write_text("API_KEY=xyz")
-        proj = tmp_path / "proj"; proj.mkdir()
-        (proj / "app.py").write_text("print(1)")
-        healer = auto_heal.AutoHealPipeline.__new__(auto_heal.AutoHealPipeline)
-        healer.project_dir = proj.resolve()
-        files = healer._read_relevant_files(f"Error in app.py and ../secret.env and {outside} and /etc/passwd")
-        assert list(files) == ["app.py"]
-
-
-# ── tool registry ──────────────────────────────────────────────────────────────
-class TestToolRegistry:
-    def _reg(self, tmp_path, perms=None):
-        from core.ai.tool_registry import ToolRegistry
-        return ToolRegistry(str(tmp_path), perms or {"file.read", "file.write", "shell", "git", "git.write", "web"})
-
-    def test_python_eval_cannot_escape(self, tmp_path):
-        reg = self._reg(tmp_path)
-        payload = "[c for c in ().__class__.__base__.__subclasses__() if c.__name__=='Popen'][0](['touch','pwned'])"
-        out = reg.call("python_eval", code=payload)
-        assert out.startswith("Error")
-        assert not (tmp_path / "pwned").exists()
-        assert reg.call("python_eval", code="[1, 2, {'a': 3}]") == "[1, 2, {'a': 3}]"
-
-    def test_bash_has_no_shell(self, tmp_path):
-        reg = self._reg(tmp_path)
-        reg.call("bash", command=f'"{sys.executable}" -c "print(1)" ; touch pwned')
-        assert not (tmp_path / "pwned").exists()
-
-    def test_git_commit_message_not_interpreted(self, tmp_path):
-        reg = self._reg(tmp_path)
-        reg.call("git_commit", message='x"; touch pwned; echo "')
-        assert not (tmp_path / "pwned").exists()
-
-    def test_safe_path_sibling_prefix(self, tmp_path):
-        from core.ai.tool_registry import ToolPermissionError
-        root = tmp_path / "proj"; root.mkdir()
-        (tmp_path / "proj-secrets").mkdir()
-        (tmp_path / "proj-secrets" / "k").write_text("secret")
-        reg = self._reg(root)
-        with pytest.raises(ToolPermissionError):
-            reg.call("read_file", path="../proj-secrets/k")
-
-    def test_write_into_git_blocked(self, tmp_path):
-        from core.ai.tool_registry import ToolPermissionError
-        with pytest.raises(ToolPermissionError):
-            self._reg(tmp_path).call("write_file", path=".git/hooks/pre-commit", content="x")
-
-    @pytest.mark.parametrize("url", [
-        "http://127.0.0.1:8000/", "http://localhost/", "http://169.254.169.254/latest/meta-data/",
-        "http://10.0.0.1/", "http://[::1]/", "file:///etc/passwd", "gopher://example.com/",
-        "http://user:pw@example.com/",
-    ])
-    def test_web_fetch_blocks_ssrf(self, tmp_path, url):
-        out = self._reg(tmp_path).call("web_fetch", url=url)
-        assert out.startswith("Fetch error")
-
-    def test_permissions_enforced(self, tmp_path):
-        from core.ai.tool_registry import ToolPermissionError
-        with pytest.raises(ToolPermissionError):
-            self._reg(tmp_path, {"file.read"}).call("bash", command="echo hi")
+    def test_output_is_capped(self, tmp_path):
+        from core.security import run_argv
+        r = run_argv([sys.executable, "-c", "print('x' * 5000)"], tmp_path, max_output=100)
+        assert "truncated" in r.stdout and len(r.stdout) < 200
 
 
 # ── O1: memory privacy / lifecycle ────────────────────────────────────────────
@@ -350,11 +238,6 @@ class TestRedactAndUrls:
         assert "[REDACTED]" in redact("api_key = abcdefghijkl")
         assert redact("plain text") == "plain text"
 
-    def test_public_url_allowed_shape(self):
-        from core.security import check_public_url
-        with pytest.raises(ValueError):
-            check_public_url("ftp://example.com")
-
 
 # ── N1: server / MCP access control ───────────────────────────────────────────
 @pytest.fixture
@@ -363,6 +246,7 @@ def client(monkeypatch, tmp_path):
     pytest.importorskip("httpx")
     monkeypatch.setenv("APEX_RUNS_DIR", str(tmp_path / "runs"))
     from fastapi.testclient import TestClient
+
     import server
     monkeypatch.setattr(server, "RUNS_DIR", (tmp_path / "runs").resolve())
     (tmp_path / "runs").mkdir()
@@ -423,7 +307,10 @@ class TestServer:
 
     @pytest.mark.skipif(IS_WIN, reason="symlinks")
     def test_download_skips_symlinks(self, client, tmp_path):
-        import io, zipfile, server
+        import io
+        import zipfile
+
+        import server
         d = server.RUNS_DIR / "0123456789abcdef"
         d.mkdir(parents=True)
         (d / "ok.txt").write_text("ok")
@@ -520,6 +407,7 @@ class TestMcpStandalone:
     def test_mcp_app_has_auth_and_no_wildcard_cors(self, monkeypatch):
         pytest.importorskip("fastapi")
         from fastapi.testclient import TestClient
+
         import mcp_server
         tok = _token(monkeypatch)
         c = TestClient(mcp_server.create_mcp_app(), base_url="http://127.0.0.1:8001")

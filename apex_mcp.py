@@ -68,8 +68,15 @@ def agents() -> dict[str, Any]:
     global _agents
     with _lock:
         if _agents is None:
-            from core.agents.base import (ArchitectAgent, CoderAgent, DebuggerAgent, DocWriterAgent,
-                                          PlannerAgent, ReviewerAgent, SelfHealerAgent)
+            from core.agents.base import (
+                ArchitectAgent,
+                CoderAgent,
+                DebuggerAgent,
+                DocWriterAgent,
+                PlannerAgent,
+                ReviewerAgent,
+                SelfHealerAgent,
+            )
             from core.ai.provider import LLMProvider
             llm, coding = LLMProvider("auto"), LLMProvider("coding")
             _agents = {

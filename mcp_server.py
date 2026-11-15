@@ -17,10 +17,16 @@ Run standalone: python mcp_server.py   (binds 127.0.0.1:8001 by default)
 Or import in server.py for integrated use.
 """
 from __future__ import annotations
+
 from dotenv import load_dotenv
+
 load_dotenv()
 
-import json, os, time, logging, threading
+import json
+import logging
+import os
+import threading
+import time
 from typing import Any
 
 log = logging.getLogger("apex.mcp")
@@ -166,22 +172,27 @@ class MCPToolExecutor:
     size-capped. Agents return text only — no file writes, no shell.
     """
 
-    _shared: "MCPToolExecutor | None" = None
+    _shared: MCPToolExecutor | None = None
     _lock = threading.Lock()
 
     @classmethod
-    def shared(cls) -> "MCPToolExecutor":
+    def shared(cls) -> MCPToolExecutor:
         with cls._lock:
             if cls._shared is None:
                 cls._shared = cls()
             return cls._shared
 
     def __init__(self):
-        from core.ai.provider import LLMProvider
         from core.agents.base import (
-            PlannerAgent, ArchitectAgent, CoderAgent, ReviewerAgent,
-            SelfHealerAgent, DebuggerAgent, DocWriterAgent
+            ArchitectAgent,
+            CoderAgent,
+            DebuggerAgent,
+            DocWriterAgent,
+            PlannerAgent,
+            ReviewerAgent,
+            SelfHealerAgent,
         )
+        from core.ai.provider import LLMProvider
         llm = LLMProvider("auto")
         coding_llm = LLMProvider("coding")
         self.agents = {
@@ -243,9 +254,10 @@ class MCPToolExecutor:
 # Exposes tools as HTTP endpoints for integration with any MCP-compatible client
 
 def create_mcp_app():
-    from fastapi import FastAPI, Body
+    from fastapi import Body, FastAPI
     from fastapi.concurrency import run_in_threadpool
     from fastapi.responses import JSONResponse
+
     from core import web_security
 
     app = FastAPI(title="APEX Society Tool Server", version="1.1.0")
@@ -292,6 +304,7 @@ def create_mcp_app():
 
 if __name__ == "__main__":
     import uvicorn
+
     from core.web_security import assert_safe_bind
     host = os.environ.get("APEX_HOST", "127.0.0.1")
     port = int(os.environ.get("APEX_MCP_PORT", "8001"))

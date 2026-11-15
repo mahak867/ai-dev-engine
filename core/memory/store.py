@@ -4,9 +4,15 @@ Stores project context, learns from past runs, suggests improvements.
 Track 3: agents accumulate experience across sessions.
 """
 from __future__ import annotations
-import json, os, re, time, hashlib, tempfile
+
+import hashlib
+import json
+import os
+import re
+import tempfile
+import time
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from dataclasses import dataclass, field, asdict
 
 from core.security import redact
 
@@ -91,12 +97,14 @@ class MemoryStore:
 
     def save(self, mem: ProjectMemory):
         path = self._path(mem.id)
+        if path is None:
+            raise ValueError(f"invalid project id: {mem.id!r}")
         data = asdict(mem)
         # Don't store full file contents in memory — too large and may hold secrets
-        data["files"] = {k: "" for k in data["files"].keys()}
+        data["files"] = {k: "" for k in data["files"]}
         data["request"] = redact(data.get("request", ""))
         data["history"] = [{**h, "detail": redact(str(h.get("detail", "")))} for h in data.get("history", [])]
-        data["lessons_learned"] = [redact(l) for l in data.get("lessons_learned", [])]
+        data["lessons_learned"] = [redact(x) for x in data.get("lessons_learned", [])]
         fd, tmp = tempfile.mkstemp(prefix=".mem-", dir=str(self.dir))
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -160,6 +168,7 @@ class MemoryStore:
                     "created": data["created"],
                     "file_count": data.get("file_count", 0),
                     "quality_score": data.get("quality_score", 0),
+                    "review_rounds": data.get("review_rounds", 1),
                     "tech_stack": data.get("tech_stack", {}),
                     "lessons_learned": data.get("lessons_learned", []),
                 })

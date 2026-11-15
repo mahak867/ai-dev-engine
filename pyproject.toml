@@ -53,6 +53,8 @@ dev = [
     "ruff>=0.5",
     "bandit>=1.7",
     "build>=1.0",
+    "pytest-cov>=5.0",
+    "mypy>=1.10",
 ]
 
 [tool.setuptools]
@@ -74,3 +76,32 @@ addopts = "-p no:cacheprovider --strict-markers"
 # Lowest supported Python — catches 3.12-only syntax (e.g. nested f-string quotes).
 target-version = "py310"
 extend-exclude = ["eval/results"]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "SIM", "I"]
+ignore = [
+    "E501",   # long prompt strings and messages are fine
+    "SIM105", # try/except/pass reads clearer than contextlib.suppress in cleanup paths
+    "B008",   # FastAPI's Body(...) defaults
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402", "E701", "E702", "SIM117"]
+"server.py" = ["E402"]        # load_dotenv() must run before app imports
+"mcp_server.py" = ["E402"]
+"benchmark.py" = ["E402"]
+"cli.py" = ["E402"]            # banner docstring precedes imports
+"eval/run_eval.py" = ["E402"] # sys.path bootstrap for running as a script
+
+[tool.coverage.run]
+source = ["core", "eval", "server", "mcp_server", "apex_mcp", "cli"]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if __name__ == .__main__.:", "raise NotImplementedError"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+check_untyped_defs = false
+files = ["core"]
